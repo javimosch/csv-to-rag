@@ -9,11 +9,15 @@ router.post('/', validateQuery, async (req, res, next) => {
   try {
     const { query } = req.body;
     const { searchResults, documents } = await QueryService.performSimilaritySearch(query);
-    const response = await QueryService.generateResponse(query, documents);
+    const answer = await QueryService.generateResponse(query, documents);
     
+    // Format the response to match the UI's expected format
     res.json({
-      response,
-      relevantDocuments: documents
+      answer,
+      sources: documents.map(doc => ({
+        fileName: doc.fileName,
+        context: doc.metadata_small // Using metadata_small as context
+      }))
     });
   } catch (error) {
     logger.error('Error in query processing:', error);

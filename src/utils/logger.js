@@ -1,19 +1,36 @@
-import winston from 'winston';
+import { logService } from '../services/log.service.js';
 
-export const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' })
-  ]
-});
+class Logger {
+    formatMessage(message, meta = {}) {
+        const formattedMeta = Object.keys(meta).length > 0 
+            ? ` | ${JSON.stringify(meta)}`
+            : '';
+        return `${message}${formattedMeta}`;
+    }
+
+    info(message, meta = {}) {
+        const formattedMessage = this.formatMessage(message, meta);
+        console.info(formattedMessage);
+        logService.info(formattedMessage);
+    }
+
+    error(message, meta = {}) {
+        const formattedMessage = this.formatMessage(message, meta);
+        console.error(formattedMessage);
+        logService.error(formattedMessage);
+    }
+
+    warn(message, meta = {}) {
+        const formattedMessage = this.formatMessage(message, meta);
+        console.warn(formattedMessage);
+        logService.warn(formattedMessage);
+    }
+
+    debug(message, meta = {}) {
+        const formattedMessage = this.formatMessage(message, meta);
+        console.debug(formattedMessage);
+        logService.debug(formattedMessage);
+    }
+}
+
+export const logger = new Logger();

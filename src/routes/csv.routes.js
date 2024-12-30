@@ -3,7 +3,7 @@ import multer from 'multer';
 import { CSVService } from '../services/csv.service.js';
 import { validateCSV } from '../middleware/validation.middleware.js';
 import { logger } from '../utils/logger.js';
-import { Document as Doc } from '../models/document.model.js';
+import { Document } from '../models/document.model.js';
 
 const router = express.Router();
 const upload = multer({
@@ -36,9 +36,9 @@ router.post('/upload',
   validateCSV,
   async (req, res, next) => {
     try {
-      const records = await CSVService.processCSV(req.file.buffer);
-      const result = await CSVService.saveToDatabase(records);
-      res.status(201).json(result);
+      const fileName = req.file.originalname;
+      const result = await CSVService.processFileAsync(req.file.buffer, fileName);
+      res.status(202).json(result); // 202 Accepted for async processing
     } catch (error) {
       logger.error('Error in CSV upload:', error);
       next(error);
@@ -48,9 +48,41 @@ router.post('/upload',
 
 router.get('/list', async (req, res, next) => {
   try {
-    const documents = await Doc.find({}, { code: 1, metadata_small: 1, timestamp: 1 });
-    res.json(documents);
+    // Aggregate documents by fileName to get file-level statistics
+    const fileStats = await Document.aggregate([
+      {
+        $group: {
+          _id: '$fileName',
+          rowCount: { $sum: 1 },
+          lastUpdated: { $max: '$timestamp' },
+          firstRow: { $first: '$$ROOT' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          fileName: '$_id',
+          rowCount: 1,
+          lastUpdated: 1,
+          sampleMetadata: {
+            code: '$firstRow.code',
+            metadata_small: '$firstRow.metadata_small'
+          }
+        }
+      },
+      {
+        $sort: { lastUpdated: -1 }
+      }
+    ]);
+    logger.info('File list retrieved successfully', {
+      fileCount: fileStats.length
+    });
+    res.json({
+      totalFiles: fileStats.length,
+      files: fileStats
+    });
   } catch (error) {
+    logger.error('Error retrieving file list:', error);
     next(error);
   }
 });

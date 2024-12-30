@@ -18,6 +18,7 @@ program
   .option('-d, --database <database>', 'MySQL database name')
   .option('-o, --output <file>', 'Output CSV file', 'mysql-schemas.csv')
   .option('-t, --tables <tables>', 'Comma-separated list of tables to process')
+  .option('-D, --delimiter <delimiter>', 'CSV delimiter', ';')
   .parse();
 
 const options = program.opts();
@@ -72,18 +73,67 @@ async function getForeignKeysAndIndexes(connection, tableName) {
   };
 }
 
+async function loadExistingData(filePath) {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const rows = content.trim().split('\n');
+    
+    // Skip header row and empty rows
+    const dataRows = rows.slice(1).filter(row => row.trim());
+    
+    const existingData = {};
+    for (const row of dataRows) {
+      const [code, metadata_small, metadata_big_1, metadata_big_2] = row.split(options.delimiter);
+      if (code && code.trim()) {  // Only add if code exists and is not empty
+        existingData[code.trim()] = {
+          metadata_small: metadata_small || '',
+          metadata_big_1: metadata_big_1 || '',
+          metadata_big_2: metadata_big_2 || ''
+        };
+      }
+    }
+    return existingData;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // File doesn't exist yet, return empty object
+      return {};
+    }
+    console.error('Error loading existing data:', error);
+    return {};
+  }
+}
+
 async function processTable(connection, tableName) {
   try {
     const columns = await getTableColumns(connection, tableName);
     const ddl = await getTableDDL(connection, tableName);
     const fkAndIndexes = await getForeignKeysAndIndexes(connection, tableName);
-
-    return {
-      code: tableName,
+    
+    // Load existing data
+    const existingData = await loadExistingData(options.output);
+    
+    // Process table schema
+    const schemaCode = tableName;
+    const schemaData = {
       metadata_small: JSON.stringify({ columns }),
       metadata_big_1: JSON.stringify({ ddl }),
       metadata_big_2: JSON.stringify(fkAndIndexes)
     };
+    
+    // Update or add schema information
+    existingData[schemaCode] = schemaData;
+
+    // Write all data back to CSV
+    const csvContent = ['code,metadata_small,metadata_big_1,metadata_big_2'];
+    
+    // Add all data (both updated and existing)
+    Object.entries(existingData).forEach(([code, data]) => {
+      csvContent.push(`${code}${options.delimiter}${data.metadata_small}${options.delimiter}${data.metadata_big_1}${options.delimiter}${data.metadata_big_2}`);
+    });
+
+    await fs.writeFile(options.output, csvContent.join('\n'));
+    console.log(`Updated schema information for table ${tableName}`);
+
   } catch (error) {
     console.error(`Error processing table ${tableName}:`, error);
     throw error;
@@ -117,44 +167,12 @@ async function main() {
       tables = rows.map(row => row.TABLE_NAME);
     }
 
-    // Check if output file exists and read existing data
-    let existingData = [];
-    try {
-      const content = await fs.readFile(options.output, 'utf-8');
-      existingData = content.trim().split('\n').slice(1).map(line => {
-        const [code, metadata_small, metadata_big_1, metadata_big_2] = line.split(',');
-        return { code, metadata_small, metadata_big_1, metadata_big_2 };
-      });
-    } catch (error) {
-      // File doesn't exist or is empty, start fresh
-    }
-
     // Process each table
-    const results = [];
     for (const table of tables) {
       console.log(`Processing table: ${table}`);
-      const result = await processTable(connection, table);
-      results.push(result);
+      await processTable(connection, table);
     }
 
-    // Merge existing data with new results, preferring new results
-    const mergedResults = [...existingData];
-    for (const newResult of results) {
-      const existingIndex = mergedResults.findIndex(r => r.code === newResult.code);
-      if (existingIndex !== -1) {
-        mergedResults[existingIndex] = newResult;
-      } else {
-        mergedResults.push(newResult);
-      }
-    }
-
-    // Write to CSV
-    const csvContent = ['code,metadata_small,metadata_big_1,metadata_big_2'];
-    for (const result of mergedResults) {
-      csvContent.push(`${result.code},${result.metadata_small},${result.metadata_big_1},${result.metadata_big_2}`);
-    }
-
-    await fs.writeFile(options.output, csvContent.join('\n'));
     console.log(`Successfully wrote schema information to ${options.output}`);
 
   } catch (error) {

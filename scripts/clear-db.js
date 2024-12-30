@@ -9,8 +9,7 @@ dotenv.config();
 async function clearPineconeData() {
   try {
     const pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY,
-      environment: process.env.PINECONE_ENVIRONMENT
+      apiKey: process.env.PINECONE_API_KEY
     });
 
     const index = pinecone.index(process.env.PINECONE_INDEX);

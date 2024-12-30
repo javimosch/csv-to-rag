@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { logger } from '../utils/logger.js';
 
 let openaiInstance = null;
+let openrouterInstance = null;
 
 export function initOpenAI() {
   if (!openaiInstance) {
@@ -13,9 +14,25 @@ export function initOpenAI() {
   return openaiInstance;
 }
 
-export function getOpenAI() {
-  if (!openaiInstance) {
-    return initOpenAI();
+export function initOpenRouter() {
+  if (!openrouterInstance) {
+    logger.info('Initializing OpenRouter client');
+    openrouterInstance = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.PUBLIC_DOMAIN || 'http://localhost:3000',
+        'X-Title': 'CSV to RAG'
+      }
+    });
   }
-  return openaiInstance;
+  return openrouterInstance;
+}
+
+export function getOpenAI() {
+  return initOpenAI();
+}
+
+export function getOpenRouter() {
+  return initOpenRouter();
 }

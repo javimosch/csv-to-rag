@@ -4,7 +4,11 @@ const documentSchema = new mongoose.Schema({
   code: {
     type: String,
     required: true,
-    unique: true,
+    index: true
+  },
+  fileName: {
+    type: String,
+    required: true,
     index: true
   },
   metadata_small: {
@@ -25,5 +29,8 @@ const documentSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Compound index for efficient querying by fileName
+documentSchema.index({ fileName: 1, code: 1 });
 
 export const Document = mongoose.model('Document', documentSchema);
