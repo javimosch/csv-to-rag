@@ -1,18 +1,22 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import { logger } from '../utils/logger.js';
 
-export async function setupPinecone() {
+export async function initPinecone() {
+  logger.info('Initializing Pinecone client', 'initPinecone', {
+    index: process.env.PINECONE_INDEX
+  });
+
   try {
     const pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY,
-      environment: process.env.PINECONE_ENVIRONMENT
+      apiKey: process.env.PINECONE_API_KEY
     });
     
-    const index = pinecone.index(process.env.PINECONE_INDEX);
-    logger.info('Pinecone connected successfully');
-    return index;
+    return pinecone.index(process.env.PINECONE_INDEX);
   } catch (error) {
-    logger.error('Pinecone connection error:', error);
+    logger.error('Failed to initialize Pinecone', 'initPinecone', {
+      error: error.message,
+      stack: error.stack
+    });
     throw error;
   }
 }

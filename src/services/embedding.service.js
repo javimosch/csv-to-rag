@@ -1,14 +1,11 @@
-import OpenAI from 'openai';
-import { setupPinecone } from '../config/pinecone.js';
+import { getOpenAI } from '../config/openai.js';
+import { initPinecone } from '../config/pinecone.js';
 import { logger } from '../utils/logger.js';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 export async function generateEmbeddings(records) {
   try {
-    const pineconeIndex = await setupPinecone();
+    const pineconeIndex = await initPinecone();
+    const openai = getOpenAI();
     
     const embeddings = await Promise.all(
       records.map(async (record) => {

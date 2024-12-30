@@ -1,16 +1,14 @@
 import OpenAI from 'openai';
-import { setupPinecone } from '../config/pinecone.js';
+import { initPinecone } from '../config/pinecone.js';
+import { getOpenAI } from '../config/openai.js';
 import { Document } from '../models/document.model.js';
 import { logger } from '../utils/logger.js';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
 export class QueryService {
   static async performSimilaritySearch(query, limit = 5) {
     try {
-      const pineconeIndex = await setupPinecone();
+      const pineconeIndex = await initPinecone();
+      const openai = getOpenAI();
       
       const queryEmbedding = await openai.embeddings.create({
         input: query,
@@ -36,6 +34,7 @@ export class QueryService {
 
   static async generateResponse(query, context) {
     try {
+      const openai = getOpenAI();
       const completion = await openai.chat.completions.create({
         model: "gpt-4",
         messages: [

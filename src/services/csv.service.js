@@ -15,7 +15,9 @@ export class CSVService {
         .on('data', (record) => {
           try {
             const processedRecord = this.validateAndProcessRecord(record);
-            records.push(processedRecord);
+            if (processedRecord) {  // Only push valid records
+              records.push(processedRecord);
+            }
           } catch (error) {
             logger.error('Error processing record:', error);
           }
@@ -29,15 +31,16 @@ export class CSVService {
     const { code, metadata_small, metadata_big_1, metadata_big_2, metadata_big_3 } = record;
     
     if (!code || !metadata_small) {
-      throw new Error('Missing required fields');
+      logger.warn('Missing required fields in record:', record);
+      return null;  // Skip this record if required fields are missing
     }
 
     return {
       code,
       metadata_small,
-      metadata_big_1: JSON.parse(metadata_big_1),
-      metadata_big_2: JSON.parse(metadata_big_2),
-      metadata_big_3: JSON.parse(metadata_big_3)
+      metadata_big_1: metadata_big_1 ? JSON.parse(metadata_big_1) : null,
+      metadata_big_2: metadata_big_2 ? JSON.parse(metadata_big_2) : null,
+      metadata_big_3: metadata_big_3 ? JSON.parse(metadata_big_3) : null
     };
   }
 
