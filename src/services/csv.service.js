@@ -10,12 +10,20 @@ export class CSVService {
       
       parse(fileBuffer, {
         columns: true,
-        skip_empty_lines: true
+        skip_empty_lines: true,
+        delimiter: ',',
+        quote: '"',
+        escape: '"',
+        relax_quotes: true,
+        relax: true,
+        columns_duplicates_to_array: true,
+        trim: true,
+        skip_records_with_error: true
       })
         .on('data', (record) => {
           try {
             const processedRecord = this.validateAndProcessRecord(record);
-            if (processedRecord) {  // Only push valid records
+            if (processedRecord) {
               records.push(processedRecord);
             }
           } catch (error) {
@@ -23,7 +31,10 @@ export class CSVService {
           }
         })
         .on('end', () => resolve(records))
-        .on('error', reject);
+        .on('error', (error) => {
+          logger.error('CSV parsing error:', error);
+          reject(error);
+        });
     });
   }
 
@@ -32,15 +43,18 @@ export class CSVService {
     
     if (!code || !metadata_small) {
       logger.warn('Missing required fields in record:', record);
-      return null;  // Skip this record if required fields are missing
+      return null;
     }
+
+    // Log the record for debugging
+    logger.info('Processing record:', record);
 
     return {
       code,
       metadata_small,
-      metadata_big_1: metadata_big_1 ? JSON.parse(metadata_big_1) : null,
-      metadata_big_2: metadata_big_2 ? JSON.parse(metadata_big_2) : null,
-      metadata_big_3: metadata_big_3 ? JSON.parse(metadata_big_3) : null
+      metadata_big_1: metadata_big_1 || '',
+      metadata_big_2: metadata_big_2 || '',
+      metadata_big_3: metadata_big_3 || ''
     };
   }
 

@@ -12,16 +12,13 @@ const documentSchema = new mongoose.Schema({
     required: true
   },
   metadata_big_1: {
-    type: mongoose.Schema.Types.Mixed,
-    required: true
+    type: mongoose.Schema.Types.Mixed
   },
   metadata_big_2: {
-    type: mongoose.Schema.Types.Mixed,
-    required: true
+    type: mongoose.Schema.Types.Mixed
   },
   metadata_big_3: {
-    type: mongoose.Schema.Types.Mixed,
-    required: true
+    type: mongoose.Schema.Types.Mixed
   },
   timestamp: {
     type: Date,

@@ -1,11 +1,18 @@
 import { body, validationResult } from 'express-validator';
+import { logger } from '../utils/logger.js'; // Adjusted import for logger
 
 export function validateCSV(req, res, next) {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  if (req.file.mimetype !== 'text/csv') {
+  logger.info('Uploaded file details:', JSON.stringify(req.file, null, 2));
+
+  // Check file extension instead of mimetype
+  const validExtensions = ['.csv', '.txt'];
+  const fileExtension = req.file.originalname.toLowerCase().match(/\.[^.]*$/);
+  
+  if (!fileExtension || !validExtensions.includes(fileExtension[0])) {
     return res.status(400).json({ error: 'Invalid file type. Please upload a CSV file' });
   }
 
