@@ -88,3 +88,10 @@ deno run --allow-net --allow-env --allow-read --allow-run --watch scripts/deno-u
 ```
 
 Note: Requires Deno to be installed.
+
+## Docker image 
+
+```bash
+docker build -t javimosch/csv-to-rag-backend:
+1.0 -f Dockerfile.backend .
+```

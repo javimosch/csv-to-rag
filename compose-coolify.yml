@@ -2,13 +2,12 @@ version: '3.8'
 
 services:
   backend:
-    image: node:20.17.0-alpine
+    image: javimosch/csv-to-rag-backend:1.0
     working_dir: /app
     expose:
       - 3000
     volumes:
       - ./:/app
-    command: ["node", "src/server.js"]
     restart: unless-stopped
 
   deno-ui:
