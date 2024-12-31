@@ -68,7 +68,7 @@ app.use('/api', authenticateApiKey);
 
 // Routes
 app.use('/api/csv', csvRoutes);
-app.use('/api/query', queryRoutes);
+app.use('/api', queryRoutes); // Now includes /completion
 app.use('/api/logs', logRoutes);
 
 // Error handling

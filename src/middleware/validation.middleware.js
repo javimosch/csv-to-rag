@@ -1,39 +1,54 @@
-import { body, validationResult } from 'express-validator';
-import { logger } from '../utils/logger.js'; // Adjusted import for logger
+import Joi from 'joi';
+import { logger } from '../utils/logger.js';
 
-export function validateCSV(req, res, next) {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No file uploaded' });
+// Validation schema for CSV file uploads
+export const csvSchema = Joi.object({
+  code: Joi.string().required(),
+  metadata_small: Joi.string().required(),
+  metadata_big_1: Joi.string().required(),
+  metadata_big_2: Joi.string().required(),
+  metadata_big_3: Joi.string().required(),
+});
+
+// Validation middleware for CSV data
+export const validateCsv = (req, res, next) => {
+  const { error } = csvSchema.validate(req.body);
+  if (error) {
+    logger.warn('CSV validation error:', { details: error.details });
+    return res.status(400).json({ error: error.details[0].message });
   }
-
-  logger.info('Uploaded file details:', JSON.stringify(req.file, null, 2));
-
-  // Check file extension instead of mimetype
-  const validExtensions = ['.csv', '.txt'];
-  const fileExtension = req.file.originalname.toLowerCase().match(/\.[^.]*$/);
-  
-  if (!fileExtension || !validExtensions.includes(fileExtension[0])) {
-    return res.status(400).json({ error: 'Invalid file type. Please upload a CSV file' });
-  }
-
   next();
-}
+};
 
-export const validateQuery = [
-  body('query')
-    .notEmpty()
-    .withMessage('Query is required')
-    .isString()
-    .withMessage('Query must be a string')
-    .trim()
-    .isLength({ min: 1, max: 1000 })
-    .withMessage('Query must be between 1 and 1000 characters'),
-  
-  (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-    next();
+// Validation schema for query requests
+const querySchema = Joi.object({
+  query: Joi.string().required(),
+});
+
+// Validation middleware for query requests
+export const validateQuery = (req, res, next) => {
+  const { error } = querySchema.validate(req.body);
+  if (error) {
+    logger.warn('Query validation error:', { details: error.details });
+    return res.status(400).json({ error: error.details[0].message });
   }
-];
+  next();
+};
+
+// Validation schema for completion requests
+const completionSchema = Joi.object({
+  prompt: Joi.string().required(),
+  max_tokens: Joi.number().integer().min(1).optional(),
+  temperature: Joi.number().min(0).max(2).optional(),
+  model: Joi.string().optional()
+});
+
+// Validation middleware for completion requests
+export const validateCompletion = (req, res, next) => {
+  const { error } = completionSchema.validate(req.body);
+  if (error) {
+    logger.warn('Completion validation error:', { details: error.details });
+    return res.status(400).json({ error: error.details[0].message });
+  }
+  next();
+};
