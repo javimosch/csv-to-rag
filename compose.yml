@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    image: node:20.17.0-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+    command: ["node", "src/server.js"]
+    restart: unless-stopped
+
+  deno-ui:
+    image: denoland/deno:alpine
+    working_dir: /app
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - INTERNAL_BACKEND=0
+    volumes:
+      - ./:/app
+    command: ["run", "--allow-net", "--allow-env", "--allow-read", "--allow-run", "scripts/deno-ui.js"]
+    restart: unless-stopped
+    depends_on:
+      - backend

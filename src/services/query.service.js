@@ -50,29 +50,103 @@ export class QueryService {
       });
       
       const openrouter = getOpenRouter();
-      logger.info('Making completion request to OpenRouter', {
-        model: process.env.LLM_MODEL || 'google/gemini-2.0-flash-exp:free'
-      });
+      const primaryModel = process.env.LLM_MODEL || 'google/gemini-2.0-flash-exp:free';
+      const fallbackModel = process.env.LLM_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
       
-      const completion = await openrouter.chat.completions.create({
-        model: process.env.LLM_MODEL || 'google/gemini-2.0-flash-exp:free',
-        messages: [
-          { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
-          { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
-        ]
-      });
-      
-      logger.info('OpenRouter response received', {
-        hasChoices: !!completion?.choices,
-        choicesLength: completion?.choices?.length
-      });
+      try {
+        logger.info('Making completion request to OpenRouter', {
+          model: primaryModel,
+          timestamp: new Date().toISOString()
+        });
+        
+        const completion = await openrouter.chat.completions.create({
+          model: primaryModel,
+          messages: [
+            { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
+            { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
+          ]
+        });
+        
+        logger.info('OpenRouter response received', {
+          hasChoices: !!completion?.choices,
+          choicesLength: completion?.choices?.length
+        });
 
-      if (!completion?.choices?.[0]?.message?.content) {
-        logger.error('Invalid completion response', { completion });
-        throw new Error('Invalid completion response from OpenRouter');
+        if (!completion?.choices?.[0]?.message?.content) {
+          logger.error('Invalid completion response', { completion });
+          throw new Error('Invalid completion response from OpenRouter Code: '+completion?.error?.code);
+        }
+
+        return completion.choices[0].message.content;
+        
+      } catch (error) {
+        logger.error('Initial model error:', {
+          error: error?.message,
+          code: error?.error?.code || error?.code,
+          metadata: error?.metadata,
+          timestamp: new Date().toISOString()
+        });
+
+        // Check for various rate limit and resource exhaustion scenarios
+        const isRateLimitError = 
+          error?.status === 429 || 
+          error?.error?.code === 429 ||
+          error?.code === 429 ||
+          (error?.metadata?.raw && JSON.parse(error.metadata.raw)?.error?.code === 429) ||
+          (error?.message && error.message.includes('429'));
+
+        if (isRateLimitError) {
+          logger.warn('Rate limit or resource exhaustion detected - Activating fallback model', {
+            primaryModel,
+            fallbackModel,
+            errorDetails: {
+              message: error?.message,
+              code: error?.error?.code,
+              raw: error?.metadata?.raw,
+              provider: error?.metadata?.provider_name
+            },
+            timestamp: new Date().toISOString()
+          });
+          
+          try {
+            logger.info('Attempting fallback model request', {
+              model: fallbackModel,
+              timestamp: new Date().toISOString()
+            });
+
+            const fallbackCompletion = await openrouter.chat.completions.create({
+              model: fallbackModel,
+              messages: [
+                { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
+                { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
+              ]
+            });
+            
+            logger.info('Fallback model response received', {
+              hasChoices: !!fallbackCompletion?.choices,
+              choicesLength: fallbackCompletion?.choices?.length
+            });
+
+            if (!fallbackCompletion?.choices?.[0]?.message?.content) {
+              logger.error('Invalid fallback completion response', { fallbackCompletion });
+              throw new Error('Invalid completion response from fallback model');
+            }
+
+            return fallbackCompletion.choices[0].message.content;
+          } catch (error) {
+            logger.error('Fallback model error:', {
+              error: error?.message,
+              code: error?.error?.code,
+              metadata: error?.metadata,
+              timestamp: new Date().toISOString()
+            });
+            throw error;
+          }
+        }
+        
+        // If it's not a rate limit error, rethrow
+        throw error;
       }
-
-      return completion.choices[0].message.content;
     } catch (error) {
       logger.error('Error generating response:', error);
       throw error;

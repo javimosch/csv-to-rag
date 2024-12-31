@@ -51,6 +51,25 @@ export const template = `<!DOCTYPE html>
                    class="w-full p-2 border border-gray-300 rounded">
         </div>
 
+        <!-- Backend Control Section -->
+<div id="backendSection" class="mb-6 bg-white rounded shadow hidden">
+    <button onclick="toggleSection('backend')" 
+            class="w-full p-4 text-left font-semibold flex items-center justify-between">
+        <span>Backend Control</span>
+        <span id="backendSectionToggle" class="section-toggle">▼</span>
+    </button>
+    <div id="backendContent" class="section-content p-4">
+        <div class="flex items-center justify-between">
+            <button id="backendToggle" 
+                    onclick="toggleBackend()" 
+                    class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500">
+                Start Backend
+            </button>
+            <div id="backendStatus" class="text-gray-600">Backend is stopped</div>
+        </div>
+    </div>
+</div>
+
         <!-- Upload Section -->
         <div class="mb-6 bg-white rounded shadow">
             <button onclick="toggleSection('upload')" 
@@ -123,18 +142,33 @@ export const template = `<!DOCTYPE html>
                 <span id="queryToggle" class="section-toggle">▼</span>
             </button>
             <div id="queryContent" class="section-content">
-                <div class="p-4 space-y-4">
+                <div class="p-4 space-y-3">
                     <div>
-                        <label for="queryInput" class="block mb-1">Your Question:</label>
                         <textarea id="queryInput" 
-                                placeholder="Enter your question here..."
-                                class="w-full p-2 border border-gray-300 rounded h-24"></textarea>
+                                  placeholder="Enter your query here..."
+                                  class="w-full p-2 border border-gray-300 rounded"
+                                  rows="3"></textarea>
                     </div>
-                    <button onclick="submitQuery()" 
-                            class="bg-green-600 text-white p-2 rounded hover:bg-green-500">
-                        Submit Query
-                    </button>
-                    <div id="queryResult" class="border border-gray-300 rounded p-4 break-words min-h-[200px]"></div>
+                    <div class="flex space-x-2">
+                        <button onclick="submitQuery()" 
+                                class="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-500">
+                            Submit Query
+                        </button>
+                        <button onclick="computeCurl()" 
+                                class="bg-gray-600 text-white p-2 rounded hover:bg-gray-500 flex items-center">
+                            <span>Compute cURL</span>
+                        </button>
+                    </div>
+                    <div id="curlCommand" class="hidden">
+                        <div class="bg-gray-100 p-3 rounded-lg text-sm font-mono relative">
+                            <pre class="whitespace-pre-wrap break-all"></pre>
+                            <button onclick="copyToClipboard(this.previousElementSibling.textContent)" 
+                                    class="absolute top-2 right-2 bg-gray-700 text-white px-2 py-1 rounded text-xs hover:bg-gray-600">
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                    <div id="queryResult" class="mt-4"></div>
                 </div>
             </div>
         </div>
@@ -172,6 +206,24 @@ export const template = `<!DOCTYPE html>
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script>
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check if internal backend is available
+            try {
+                const response = await fetch('/api/backend/available');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.available) {
+                        document.getElementById('backendSection').classList.remove('hidden');
+                        checkBackendState();
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking backend availability:', error);
+            }
+        });
+    </script>
+    <script src="/static/main.js"></script>
 </body>
 </html>`;

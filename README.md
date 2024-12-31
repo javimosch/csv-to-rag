@@ -78,3 +78,13 @@ This Node.js application implements a Retrieval-Augmented Generation (RAG) syste
 
 ## Error Handling
 Comprehensive error handling is implemented for all API requests to ensure proper feedback and logging.
+
+## UI
+
+There is a standalone UI that can be run with the following command:
+
+```bash
+deno run --allow-net --allow-env --allow-read --allow-run --watch scripts/deno-ui.js 
+```
+
+Note: Requires Deno to be installed.
