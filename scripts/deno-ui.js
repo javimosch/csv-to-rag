@@ -32,8 +32,10 @@ import { config } from "https://deno.land/x/dotenv/mod.ts";
 // Load environment variables from .env file
 const env = config();
 
-// Set Deno.env variable
+// Set Deno.env variables
 Deno.env.set('UI_BACKEND_URL', env.UI_BACKEND_URL || 'http://localhost:3000');
+Deno.env.set('UI_USERNAME', env.UI_USERNAME || 'admin');
+Deno.env.set('UI_PASSWORD', env.UI_PASSWORD || 'admin');
 
 console.log('Backend URL:', Deno.env.get('UI_BACKEND_URL'));
 
@@ -138,6 +140,30 @@ async function stopBackend() {
 }
 
 async function handler(req) {
+  // Check basic authentication
+  const authorization = req.headers.get('Authorization');
+  if (!authorization) {
+    return new Response('Unauthorized', {
+      status: 401,
+      headers: {
+        'WWW-Authenticate': 'Basic realm="Restricted Access"',
+      },
+    });
+  }
+
+  // Decode and verify credentials
+  const [scheme, encoded] = authorization.split(' ');
+  if (!encoded || scheme !== 'Basic') {
+    return new Response('Invalid authentication', { status: 401 });
+  }
+
+  const decoded = atob(encoded);
+  const [username, password] = decoded.split(':');
+  
+  if (username !== Deno.env.get('UI_USERNAME') || password !== Deno.env.get('UI_PASSWORD')) {
+    return new Response('Invalid credentials', { status: 401 });
+  }
+
   const url = new URL(req.url);
 
   if (url.pathname === "/") {
