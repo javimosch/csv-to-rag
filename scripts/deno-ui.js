@@ -38,7 +38,7 @@ Deno.env.set('UI_BACKEND_URL', env.UI_BACKEND_URL || 'http://localhost:3000');
 console.log('Backend URL:', Deno.env.get('UI_BACKEND_URL'));
 
 // Get port from environment variable or use default 3001
-const port = parseInt(env.PORT || "3001");
+const port = parseInt(Deno.env.get('PORT') || "3001");
 
 // Store backend process
 let backendProcess = null;
