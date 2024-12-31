@@ -27,9 +27,18 @@
 import { serve } from "https://deno.land/std@0.210.0/http/server.ts";
 import { template } from "./deno-ui/ui.js";
 import { join } from "https://deno.land/std@0.210.0/path/mod.ts";
+import { config } from "https://deno.land/x/dotenv/mod.ts";
+
+// Load environment variables from .env file
+const env = config();
+
+// Set Deno.env variable
+Deno.env.set('UI_BACKEND_URL', env.UI_BACKEND_URL || 'http://localhost:3000');
+
+console.log('Backend URL:', Deno.env.get('UI_BACKEND_URL'));
 
 // Get port from environment variable or use default 3001
-const port = parseInt(Deno.env.get("PORT") || "3001");
+const port = parseInt(env.PORT || "3001");
 
 // Store backend process
 let backendProcess = null;

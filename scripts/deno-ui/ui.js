@@ -46,7 +46,7 @@ export const template = `<!DOCTYPE html>
         
         <div class="mb-4">
             <label for="baseUrl" class="block mb-1">Base URL:</label>
-            <input type="text" id="baseUrl" value="http://localhost:3000" 
+            <input type="text" id="baseUrl" value="${Deno.env.get('UI_BACKEND_URL')||"http://localhost:3000"}" 
                    placeholder="Enter base URL (e.g., http://localhost:3000)"
                    class="w-full p-2 border border-gray-300 rounded">
         </div>
