@@ -1,12 +1,46 @@
+// All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+
 // Backend state
 let backendRunning = false;
+
+// Initialize backend settings from localStorage
+window.addEventListener('load', () => {
+    const savedApiKey = localStorage.getItem('apiKey');
+    const savedBaseUrl = localStorage.getItem('baseUrl');
+    
+    if (savedApiKey) {
+        document.getElementById('apiKey').value = savedApiKey;
+    }
+    
+    if (savedBaseUrl) {
+        document.getElementById('baseUrl').value = savedBaseUrl;
+    }
+});
+
+function handleApiKeyChange(value) {
+    localStorage.setItem('apiKey', value);
+}
+
+function handleBaseUrlChange(value) {
+    localStorage.setItem('baseUrl', value);
+}
+
+function getAuthHeaders() {
+    const apiKey = document.getElementById('apiKey').value;
+    return {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+    };
+}
 
 async function checkBackendState() {
     const button = document.getElementById('backendToggle');
     const status = document.getElementById('backendStatus');
     
     try {
-        const response = await fetch('/api/backend/state');
+        const response = await fetch('/api/backend/state', {
+            headers: getAuthHeaders()
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -41,7 +75,9 @@ async function toggleBackend() {
         const action = backendRunning ? 'stop' : 'start';
         status.innerHTML = `<span class="text-blue-600">${action === 'start' ? 'Starting' : 'Stopping'} backend...</span>`;
         
-        const response = await fetch(`/api/backend/${action}`);
+        const response = await fetch(`/api/backend/${action}`, {
+            headers: getAuthHeaders()
+        });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }

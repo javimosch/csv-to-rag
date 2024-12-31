@@ -23,10 +23,6 @@
  * ./csv-to-rag-ui
  */
 
-// Import required Deno modules
-import { serve } from "https://deno.land/std@0.210.0/http/server.ts";
-import { template } from "./deno-ui/ui.js";
-import { join } from "https://deno.land/std@0.210.0/path/mod.ts";
 import { config } from "https://deno.land/x/dotenv/mod.ts";
 
 // Load environment variables from .env file
@@ -36,6 +32,13 @@ const env = config();
 Deno.env.set('UI_BACKEND_URL', env.UI_BACKEND_URL || 'http://localhost:3000');
 Deno.env.set('UI_USERNAME', env.UI_USERNAME || 'admin');
 Deno.env.set('UI_PASSWORD', env.UI_PASSWORD || 'admin');
+Deno.env.set('BACKEND_API_KEY', env.BACKEND_API_KEY || 'secret');
+
+
+// Import required Deno modules
+import { serve } from "https://deno.land/std@0.210.0/http/server.ts";
+import { template } from "./deno-ui/ui.js";
+import { join } from "https://deno.land/std@0.210.0/path/mod.ts";
 
 console.log('Backend URL:', Deno.env.get('UI_BACKEND_URL'));
 
@@ -140,31 +143,36 @@ async function stopBackend() {
 }
 
 async function handler(req) {
-  // Check basic authentication
-  const authorization = req.headers.get('Authorization');
-  if (!authorization) {
-    return new Response('Unauthorized', {
-      status: 401,
-      headers: {
-        'WWW-Authenticate': 'Basic realm="Restricted Access"',
-      },
-    });
-  }
 
-  // Decode and verify credentials
-  const [scheme, encoded] = authorization.split(' ');
-  if (!encoded || scheme !== 'Basic') {
-    return new Response('Invalid authentication', { status: 401 });
-  }
-
-  const decoded = atob(encoded);
-  const [username, password] = decoded.split(':');
-  
-  if (username !== Deno.env.get('UI_USERNAME') || password !== Deno.env.get('UI_PASSWORD')) {
-    return new Response('Invalid credentials', { status: 401 });
-  }
 
   const url = new URL(req.url);
+
+  // Decode and verify credentials for root route
+  if (url.pathname === "/") {
+    // Check basic authentication
+    const authorization = req.headers.get('Authorization');
+    if (!authorization) {
+      return new Response('Unauthorized', {
+        status: 401,
+        headers: {
+          'WWW-Authenticate': 'Basic realm="Restricted Access"',
+        },
+      });
+    }
+    const [scheme, encoded] = authorization.split(' ');
+    if (!encoded || scheme !== 'Basic') {
+      return new Response('Invalid authentication', { status: 401 });
+    }
+
+    const decoded = atob(encoded);
+    const [username, password] = decoded.split(':');
+
+    if (username !== Deno.env.get('UI_USERNAME') || password !== Deno.env.get('UI_PASSWORD')) {
+      return new Response('Invalid credentials', { status: 401 });
+    }
+  }
+
+
 
   if (url.pathname === "/") {
     return new Response(template, {

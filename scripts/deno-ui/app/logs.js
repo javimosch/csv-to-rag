@@ -1,3 +1,5 @@
+// All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+
 // Log management
 let logs = [];
 let lastFetchTime = Date.now() - 10000; // default to now - 10 seconds
@@ -5,6 +7,14 @@ let logsVisible = true;
 let logFetchInterval = null;
 const MAX_LOGS = 1000;
 const LOG_FETCH_INTERVAL = 5000;
+
+function getAuthHeaders() {
+    const apiKey = document.getElementById('apiKey').value;
+    return {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+    };
+}
 
 // Load logs from localStorage
 function loadLogsFromStorage() {
@@ -102,7 +112,10 @@ async function fetchLogs() {
     const baseUrl = document.getElementById('baseUrl').value;
     
     try {
-        const response = await fetch(`${baseUrl}/api/logs?timestamp=${lastFetchTime}`);
+        const response = await fetch(`${baseUrl}/api/logs?timestamp=${lastFetchTime}`, {
+            headers: getAuthHeaders()
+        });
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -137,7 +150,8 @@ async function fetchLogs() {
 
 // Handle infinite scrolling and track user scroll
 function handleLogsScroll(event) {
-    // Implementation can be added if needed
+    // Save the user's scroll position for later
+    localStorage.setItem('logsScrollPosition', event.target.scrollTop);
 }
 
 // Clear logs
@@ -150,8 +164,8 @@ function clearLogs() {
 // Start log fetching
 function startLogFetching() {
     if (!logFetchInterval) {
+        fetchLogs(); // Initial fetch
         logFetchInterval = setInterval(fetchLogs, LOG_FETCH_INTERVAL);
-        fetchLogs(); // Fetch immediately
     }
 }
 
@@ -161,6 +175,17 @@ function stopLogFetching() {
         clearInterval(logFetchInterval);
         logFetchInterval = null;
     }
+}
+
+function appendLog(message, level = 'info') {
+    const log = {
+        timestamp: Date.now(),
+        level,
+        message
+    };
+    logs = [log, ...logs].slice(0, MAX_LOGS);
+    saveLogsToStorage();
+    displayLogs();
 }
 
 startLogFetching()

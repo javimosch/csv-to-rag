@@ -1,3 +1,5 @@
+// All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+
 // Section visibility state
 const sectionStates = {
     backend: true,

@@ -1,3 +1,5 @@
+// All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+
 // Initialize everything when the page loads
 window.addEventListener('load', () => {
     initializeSections();

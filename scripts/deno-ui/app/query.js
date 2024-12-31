@@ -1,6 +1,24 @@
+
+// All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+
+function getAuthHeaders() {
+    const apiKey = document.getElementById('apiKey').value;
+    return {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+    };
+}
+
 async function submitQuery() {
-    const baseUrl = document.getElementById('baseUrl').value;
     const queryInput = document.getElementById('queryInput');
+    const query = queryInput.value.trim();
+    
+    if (!query) {
+        appendLog('Please enter a query', 'error');
+        return;
+    }
+    
+    const baseUrl = document.getElementById('baseUrl').value;
     const queryResult = document.getElementById('queryResult');
     const error = document.getElementById('error');
     
@@ -10,69 +28,97 @@ async function submitQuery() {
         
         const response = await fetch(`${baseUrl}/api/query`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                query: queryInput.value
-            })
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ query })
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data && data.answer) {
-            queryResult.innerHTML = `
-                <div class="mt-4 space-y-4">
-                    <div class="bg-white p-4 rounded-lg shadow">
-                        <div class="prose max-w-none">
-                            ${data.answer}
-                        </div>
-                    </div>
-                    ${data.sources && data.sources.length > 0 ? `
-                        <div class="mt-6">
-                            <h3 class="text-lg font-semibold mb-3">Sources</h3>
-                            <div class="space-y-3">
-                                ${data.sources.map(source => `
-                                    <div class="bg-gray-50 p-4 rounded-lg">
-                                        <div class="font-medium text-gray-700 mb-2">${source.fileName}</div>
-                                        <pre class="text-sm bg-gray-100 p-2 rounded overflow-x-auto">${JSON.stringify(JSON.parse(source.context), null, 2)}</pre>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : ''}
-                </div>`;
+        if (response.ok) {
+            const result = await response.json();
+            displayQueryResult(result);
+            appendLog('Query executed successfully');
         } else {
-            queryResult.innerHTML = '<div class="text-gray-600">No results found</div>';
+            const error = await response.text();
+            appendLog(`Query failed: ${error}`, 'error');
         }
-    } catch (err) {
-        error.textContent = `Error: ${err.message}`;
-        queryResult.innerHTML = '';
+    } catch (error) {
+        appendLog(`Query failed: ${error.message}`, 'error');
     }
 }
 
 function computeCurl() {
-    const baseUrl = document.getElementById('baseUrl').value;
     const queryInput = document.getElementById('queryInput');
-    const curlCommand = document.getElementById('curlCommand');
+    const query = queryInput.value.trim();
+    const baseUrl = document.getElementById('baseUrl').value;
+    const apiKey = document.getElementById('apiKey').value;
     
-    const curl = `curl -X POST "${baseUrl}/api/query" \\
+    if (!query) {
+        appendLog('Please enter a query first', 'error');
+        return;
+    }
+    
+    const curlCommand = `curl -X POST "${baseUrl}/api/query" \\
      -H "Content-Type: application/json" \\
-     -d '{"query": "${queryInput.value.replace(/"/g, '\\"')}"}'`;
+     -H "Authorization: Bearer ${apiKey}" \\
+     -d '{"query": "${query.replace(/'/g, "\\'")}"}'`;
     
-    curlCommand.classList.remove('hidden');
-    curlCommand.querySelector('pre').textContent = curl;
+    const curlDiv = document.getElementById('curlCommand');
+    curlDiv.classList.remove('hidden');
+    curlDiv.querySelector('pre').textContent = curlCommand;
 }
 
-async function copyToClipboard(text) {
-    try {
-        await navigator.clipboard.writeText(text);
-        // Optional: Add visual feedback
-    } catch (err) {
-        console.error('Failed to copy text:', err);
+function displayQueryResult(result) {
+    const queryResult = document.getElementById('queryResult');
+    queryResult.innerHTML = '';
+    
+    if (Array.isArray(result)) {
+        const table = document.createElement('table');
+        table.className = 'min-w-full divide-y divide-gray-200';
+        
+        // Create table header
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        Object.keys(result[0] || {}).forEach(key => {
+            const th = document.createElement('th');
+            th.className = 'px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+            th.textContent = key;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+        
+        // Create table body
+        const tbody = document.createElement('tbody');
+        result.forEach((row, i) => {
+            const tr = document.createElement('tr');
+            tr.className = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            
+            Object.values(row).forEach(value => {
+                const td = document.createElement('td');
+                td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+                td.textContent = value;
+                tr.appendChild(td);
+            });
+            
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        
+        queryResult.appendChild(table);
+    } else {
+        queryResult.textContent = JSON.stringify(result, null, 2);
     }
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        const button = document.querySelector('#curlCommand button');
+        const originalText = button.textContent;
+        button.textContent = 'Copied!';
+        setTimeout(() => {
+            button.textContent = originalText;
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy text:', err);
+        appendLog('Failed to copy to clipboard', 'error');
+    });
 }

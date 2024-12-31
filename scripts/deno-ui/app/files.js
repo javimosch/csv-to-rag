@@ -1,3 +1,13 @@
+// All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+
+function getAuthHeaders(contentType = 'application/json') {
+    const apiKey = document.getElementById('apiKey').value;
+    return {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': contentType
+    };
+}
+
 async function listFiles() {
     const baseUrl = document.getElementById('baseUrl').value;
     const fileList = document.getElementById('fileList');
@@ -7,7 +17,10 @@ async function listFiles() {
         error.textContent = '';
         fileList.innerHTML = 'Loading...';
         
-        const response = await fetch(`${baseUrl}/api/csv/list`);
+        const response = await fetch(`${baseUrl}/api/csv/list`, {
+            headers: getAuthHeaders()
+        });
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -61,6 +74,9 @@ async function uploadFile() {
 
         const response = await fetch(`${baseUrl}/api/csv/upload`, {
             method: 'POST',
+            headers: {
+                'Authorization': getAuthHeaders().Authorization
+            },
             body: formData
         });
 
@@ -84,10 +100,4 @@ async function uploadFile() {
     }
 }
 
-function formatSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+

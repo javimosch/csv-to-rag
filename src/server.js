@@ -18,7 +18,8 @@ const requiredEnvVars = [
   'PINECONE_API_KEY',
   'PINECONE_INDEX', //ENVIRONMENT is not required
   'MONGODB_URI',
-  'PORT'
+  'PORT',
+  'BACKEND_API_KEY'
 ];
 
 function validateEnv() {
@@ -40,6 +41,30 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Bearer token authentication middleware
+const authenticateApiKey = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid authorization header' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  
+  if (token !== process.env.BACKEND_API_KEY) {
+    console.log('Invalid API key',{
+      token,
+      expected: process.env.BACKEND_API_KEY
+    });
+    return res.status(401).json({ error: 'Invalid API key' });
+  }
+
+  next();
+};
+
+// Apply authentication middleware to all /api routes
+app.use('/api', authenticateApiKey);
 
 // Routes
 app.use('/api/csv', csvRoutes);
