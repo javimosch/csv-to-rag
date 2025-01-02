@@ -8,7 +8,7 @@ services:
       - "3000:3000"
     volumes:
       - ./:/app
-    command: ["node", "src/server.js"]
+    command: ["npm","run", "dev"]
     restart: unless-stopped
 
   deno-ui:
