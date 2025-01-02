@@ -88,35 +88,5 @@ router.delete('/file/:fileName', async (req, res, next) => {
   }
 });
 
-// Repair file metadata
-router.post('/repair/:fileName', upload.single('csvFile'), validateCsv, async (req, res, next) => {
-  try {
-    const { fileName } = req.params;
-    if (!fileName || !req.file) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Both file name and CSV file are required' 
-      });
-    }
-
-    const result = await CSVService.repairFileMetadata(
-      req.file.buffer,
-      req.file.originalname,
-      fileName
-    );
-    res.json(result);
-  } catch (error) {
-    logger.error('Error repairing file:', { 
-      fileName: req.params.fileName,
-      error: error.message,
-      stack: error.stack
-    });
-    
-    res.status(500).json({ 
-      success: false,
-      error: error.message || 'Internal server error while repairing file'
-    });
-  }
-});
 
 export const csvRoutes = router;

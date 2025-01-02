@@ -20,6 +20,30 @@ function chunkArray(array, size) {
 // Utility function to add delay between operations
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+
+async function embedDocument(code, metadata_small) {
+  try {
+      const openai = getOpenAI();
+      const response = await openai.embeddings.create({
+          input: `${code}\n${metadata_small}`,
+          model: "text-embedding-ada-002"
+      });
+      
+      if (!response || !response.data || !response.data[0]) {
+          logger.error('Invalid embedding response from OpenAI:', response);
+          return null;
+      }
+      
+      return response.data[0].embedding;
+  } catch (error) {
+      logger.error(`Error generating embedding for ${code}:`, {
+          message: error.message,
+          stack: error.stack
+      });
+      return null;
+  }
+}
+
 async function generateEmbeddingBatch(records, openai) {
   const embeddingPromises = records.map(async (record) => {
     try {
@@ -205,20 +229,23 @@ async function getVectorCountsByFileName(fileNames) {
 
     const pineconeIndex = await initPinecone();
     const counts = new Map();
+    const dim = parseInt(process.env.VECTOR_DIM || '1536', 10);
 
     // Query Pinecone for each file name
     for (const fileName of fileNames) {
       try {
-        const queryResponse = await pineconeIndex.describeIndexStats({
-          filter: {
-            fileName: fileName
-          }
+        const zeroVector = new Array(dim).fill(0);
+        const queryResponse = await pineconeIndex.query({
+          vector: zeroVector,
+          filter: { fileName },
+          topK: 10000, // Set a high limit to get all vectors
+          includeMetadata: false
         });
 
-        counts.set(fileName, queryResponse.totalVectorCount || 0);
+        counts.set(fileName, queryResponse.matches?.length || 0);
         
         // Add delay to avoid rate limiting
-        await delay(100);
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch (error) {
         logger.error('Error getting vector count for file:', {
           fileName,
@@ -236,6 +263,7 @@ async function getVectorCountsByFileName(fileNames) {
 }
 
 export {
+  embedDocument,
   generateEmbeddings,
   deleteVectors,
   getVectorCountsByFileName

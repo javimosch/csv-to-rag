@@ -50,12 +50,7 @@ async function listFiles() {
                                 <div>Sample Metadata: ${file.sampleMetadata.metadata_small}</div>
                             </div>
                             <div class="flex flex-col gap-2">
-                                <button 
-                                    onclick="repairFile('${file.fileName}')"
-                                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-2 rounded text-sm"
-                                >
-                                    Health Check
-                                </button>
+                               
                                 <button 
                                     onclick="deleteFile('${file.fileName}')"
                                     class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
@@ -161,56 +156,3 @@ async function uploadFile() {
     }
 }
 
-async function repairFile(fileName) {
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.csv';
-    
-    fileInput.onchange = async function() {
-        if (!fileInput.files || !fileInput.files[0]) {
-            return;
-        }
-
-        const baseUrl = document.getElementById('baseUrl').value;
-        const error = document.getElementById('error');
-        const file = fileInput.files[0];
-        
-        try {
-            error.textContent = '';
-            
-            const formData = new FormData();
-            formData.append('csvFile', file);
-            
-            const response = await fetch(`${baseUrl}/api/csv/repair/${encodeURIComponent(fileName)}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': getAuthHeaders()['Authorization']
-                },
-                body: formData
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-            }
-            
-            const result = await response.json();
-            if (result.success) {
-                alert(`File repaired successfully!\n\nStats:\n` +
-                      `- Existing documents: ${result.stats.existingDocuments}\n` +
-                      `- Repair records: ${result.stats.repairRecords}\n` +
-                      `- Updated: ${result.stats.updated}\n` +
-                      `- Skipped: ${result.stats.skipped}\n` +
-                      `- Errors: ${result.stats.errors}`);
-                // Refresh the file list
-                await listFiles();
-            } else {
-                throw new Error(result.error || 'Repair operation failed');
-            }
-        } catch (err) {
-            error.textContent = `Error repairing file: ${err.message}`;
-        }
-    };
-    
-    fileInput.click();
-}
