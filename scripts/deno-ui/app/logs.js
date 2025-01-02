@@ -34,6 +34,17 @@ function saveLogsToStorage() {
         localStorage.setItem('logs', JSON.stringify(logs));
     } catch (error) {
         console.error('Error saving logs to storage:', error);
+        if (error.message.includes('QuotaExceededError')) {
+            console.warn('Local storage quota exceeded. Pruning logs.');
+            logs = [];
+            // Attempt to save again after pruning
+            try {
+                localStorage.setItem('logs', JSON.stringify(logs));
+                console.log('Logs saved successfully after pruning.');
+            } catch (retryError) {
+                console.error('Error saving logs after pruning:', retryError);
+            }
+        }
     }
 }
 

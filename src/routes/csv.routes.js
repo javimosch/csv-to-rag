@@ -19,11 +19,14 @@ router.post('/upload', upload.single('csvFile'), validateCsv, async (req, res, n
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const csvData = req.file.buffer.toString('utf-8');
-    const csvRecords = await CSVService.parseCsv(csvData);
-    const savedRecords = await CSVService.saveCsvRecords(csvRecords);
-
-    res.status(201).json({ message: 'CSV file uploaded and processed', data: savedRecords });
+    // Start async processing
+    const result = await CSVService.processFileAsync(req.file.buffer, req.file.originalname);
+    
+    res.status(202).json({
+      message: 'CSV file upload started',
+      jobId: result.jobId,
+      fileName: result.fileName
+    });
   } catch (error) {
     logger.error('Error in CSV upload:', error);
     next(error);

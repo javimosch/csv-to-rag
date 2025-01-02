@@ -59,21 +59,21 @@ export class CSVService {
             }
             
             // Log the raw record for debugging
-            logger.debug('Processing raw record:', { 
+            /* logger.debug('Processing raw record:', { 
               recordNum: recordCount,
               record: JSON.stringify(record)
-            });
+            }); */
             
             // Log parsed record before validation
-            logger.info('Parsed record:', { record });
+            //logger.info('Parsed record:', { record });
             
             const processedRecord = this.validateAndProcessRecord(record, fileName);
             if (processedRecord) {
               records.push(processedRecord);
-              logger.debug('Record validated and processed successfully:', { 
+              /* logger.debug('Record validated and processed successfully:', { 
                 recordNum: recordCount,
                 record: JSON.stringify(processedRecord)
-              });
+              }); */
             } else {
               errorCount++;
               logger.warn('Record validation failed:', { 

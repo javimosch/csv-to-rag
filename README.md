@@ -68,6 +68,22 @@ This Node.js application implements a Retrieval-Augmented Generation (RAG) syste
     -d '{"query": "Your search query here"}'
   ```
 
+### OpenAI-like Completion
+- **POST** `/completion`
+- **Description**: Perform Retrieval-Augmented Generation (RAG) with OpenAI-like API format.
+- **Curl Example**:
+  ```bash
+  curl -X POST \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer api-key" \
+     -d '{
+       "prompt": "What fields for an user ?",
+       "max_tokens": 60,
+       "temperature": 0.8
+     }' \
+     http://localhost:3000/api/completion
+  ```
+
 ## Environment Configuration
 - `OPENAI_API_KEY`: OpenAI API authentication
 - `OPENROUTER_API_KEY`: OpenRouter API authentication

@@ -1,6 +1,15 @@
+
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+import { logger } from './utils/logger.js';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+
+logger.info('Dotenv loaded'); //It doesnt print
+
+//print inside csv.routes is called first
 import { csvRoutes } from './routes/csv.routes.js';
 import { queryRoutes } from './routes/query.routes.js';
 import { logRoutes } from './routes/log.routes.js';
@@ -8,9 +17,6 @@ import { errorHandler } from './middleware/error.middleware.js';
 import { setupMongoDB } from './config/mongodb.js';
 import { initPinecone } from './config/pinecone.js';
 import { initOpenAI } from './config/openai.js';
-import { logger } from './utils/logger.js';
-
-dotenv.config();
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -35,6 +41,7 @@ function validateEnv() {
 
 // Validate environment variables before starting the server
 validateEnv();
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;

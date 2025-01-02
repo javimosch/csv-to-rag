@@ -65,7 +65,7 @@ async function uploadFile() {
 
         const file = fileInput.files[0];
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('csvFile', file);
         formData.append('delimiter', delimiter);
 
         progress.classList.remove('hidden');
