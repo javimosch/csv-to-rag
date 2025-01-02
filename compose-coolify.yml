@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend:
-    image: javimosch/csv-to-rag-backend:1.0
+    image: javimosch/csv-to-rag-backend:1.1
     working_dir: /app
     expose:
       - 3000
