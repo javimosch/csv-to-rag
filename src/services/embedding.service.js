@@ -77,7 +77,7 @@ async function saveBatchToStorage(embeddings, pineconeIndex) {
   }
 }
 
-export async function generateEmbeddings(records) {
+async function generateEmbeddings(records) {
   try {
     const pineconeIndex = await initPinecone();
     const openai = getOpenAI();
@@ -149,3 +149,94 @@ export async function generateEmbeddings(records) {
     throw error;
   }
 }
+
+async function deleteVectors(codes) {
+  try {
+    if (!codes || codes.length === 0) {
+      logger.warn('No codes provided for vector deletion');
+      return;
+    }
+
+    const pineconeIndex = await initPinecone();
+    
+    // Delete in batches to avoid overwhelming Pinecone
+    const batches = chunkArray(codes, BATCH_SIZE());
+    
+    logger.info('Starting vector deletion', { 
+      totalVectors: codes.length,
+      batchCount: batches.length 
+    });
+
+    for (const batch of batches) {
+      try {
+        await pineconeIndex.deleteMany({
+          ids: batch
+        });
+        
+        logger.info('Deleted vector batch', { 
+          batchSize: batch.length 
+        });
+        
+        // Add delay between batches
+        await delay(BATCH_DELAY());
+      } catch (error) {
+        logger.error('Error deleting vector batch:', { 
+          error: error.message,
+          batch 
+        });
+        throw error;
+      }
+    }
+
+    logger.info('Vector deletion completed', { 
+      totalVectorsDeleted: codes.length 
+    });
+  } catch (error) {
+    logger.error('Error in deleteVectors:', error);
+    throw error;
+  }
+}
+
+async function getVectorCountsByFileName(fileNames) {
+  try {
+    if (!fileNames || fileNames.length === 0) {
+      return new Map();
+    }
+
+    const pineconeIndex = await initPinecone();
+    const counts = new Map();
+
+    // Query Pinecone for each file name
+    for (const fileName of fileNames) {
+      try {
+        const queryResponse = await pineconeIndex.describeIndexStats({
+          filter: {
+            fileName: fileName
+          }
+        });
+
+        counts.set(fileName, queryResponse.totalVectorCount || 0);
+        
+        // Add delay to avoid rate limiting
+        await delay(100);
+      } catch (error) {
+        logger.error('Error getting vector count for file:', {
+          fileName,
+          error: error.message
+        });
+        counts.set(fileName, 0);
+      }
+    }
+
+    return counts;
+  } catch (error) {
+    logger.error('Error getting vector counts:', error);
+    throw error;
+  }
+}
+
+export {
+  generateEmbeddings,
+  deleteVectors,
+  getVectorCountsByFileName
+};

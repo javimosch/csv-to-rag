@@ -183,7 +183,7 @@ async function handler(req) {
   if (url.pathname === "/static/main.js") {
     try {
       let jsContent;
-      if (Deno.env.get("DEV") === "true") {
+      //if (Deno.env.get("DEV") === "true") {
         // Development mode - load files individually
         const files = [];
         const appDir = join(Deno.cwd(), "scripts", "deno-ui", "app");
@@ -193,12 +193,12 @@ async function handler(req) {
           }
         }
         jsContent = (await Promise.all(files)).join("\n");
-      } else {
+      /* } else {
         // Production mode - use embedded bundle
         jsContent = await Deno.readTextFile(
           new URL("./deno-ui/app-bundle.js", import.meta.url)
         );
-      }
+      } */
 
       return new Response(jsContent, {
         headers: { "Content-Type": "application/javascript" },
