@@ -175,7 +175,7 @@ async function handler(req) {
 
 
   if (url.pathname === "/") {
-    return new Response(template, {
+    return new Response(template(), {
       headers: { "Content-Type": "text/html" },
     });
   }

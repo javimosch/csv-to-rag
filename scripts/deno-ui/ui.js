@@ -7,12 +7,12 @@ import { template as queryTemplate } from './ui/query.js';
 import { template as logsTemplate } from './ui/logs.js';
 
 // Combine all templates
-export const template = mainTemplate.replace(
+export const template = ()=>mainTemplate.replace(
     '</head>',
     `<style>${styles}</style>\n</head>`
 ).replace(
     '<div id="error" class="text-red-600 mt-4 mb-4"></div>',
-    `${backendTemplate}
+    `${backendTemplate()}
     ${uploadTemplate}
     ${fileListTemplate}
     ${queryTemplate}

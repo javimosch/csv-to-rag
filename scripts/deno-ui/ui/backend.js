@@ -1,4 +1,4 @@
-export const template = `
+export const template = ()=>`
 <!-- Backend Control Section -->
 <div id="backendSection" class="mb-6 bg-white rounded shadow hidden">
     <button onclick="toggleSection('backend')" 
