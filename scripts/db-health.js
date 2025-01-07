@@ -41,7 +41,8 @@ async function parseCsvFile(filePath) {
                     ...record,
                     metadata_small: record.metadata_small || "",
                     metadata_big_1: record.metadata_big_1 || "",
-                    metadata_big_2: record.metadata_big_2 || ""
+                    metadata_big_2: record.metadata_big_2 || "",
+                    metadata_big_3: record.metadata_big_3 || ""
                 }));
 
                 resolve(parsedRecords);
@@ -207,7 +208,7 @@ async function promptUser(message) {
     });
 }
 
-async function repairMetadata(pineconeIndex, csvPath, options = { auto: false }) {
+async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, code: null }) {
     try {
         // Extract fileName from csvPath
         const fileName = csvPath.split('/').pop();
@@ -220,14 +221,25 @@ async function repairMetadata(pineconeIndex, csvPath, options = { auto: false })
         }
         logger.info(`Found ${records.length} records in CSV file`);
 
+        // If code is provided, filter records to only repair the specified row
+        let recordsToProcess = records;
+        if (options.code) {
+            recordsToProcess = records.filter(record => record.code.toLowerCase().includes(options.code.toLowerCase()));
+            if (recordsToProcess.length === 0) {
+                logger.error(`No records found with code containing: ${options.code} in CSV file`);
+                return;
+            }
+            logger.info(`Found ${recordsToProcess.length} records with code containing: ${options.code} in CSV file`);
+        }
+
         // Calculate dynamic batch size for max 5 batches
-        const batchSize = Math.max(10, Math.ceil(records.length / 5));
+        const batchSize = options.code ? 1 : Math.max(10, Math.ceil(records.length / 5));
         logger.info(`Using batch size: ${batchSize}`);
 
         // Process records in batches
         const batches = [];
-        for (let i = 0; i < records.length; i += batchSize) {
-            batches.push(records.slice(i, i + batchSize));
+        for (let i = 0; i < recordsToProcess.length; i += batchSize) {
+            batches.push(recordsToProcess.slice(i, i + batchSize));
         }
 
         logger.info(`Processing ${batches.length} batches`);
@@ -305,6 +317,9 @@ async function processBatch(pineconeIndex, batch, isAuto = false) {
                                 code: record.code,
                                 fileName: record.fileName,
                                 metadata_small: record.metadata_small,
+                                metadata_big_1: record.metadata_big_1,
+                                metadata_big_2: record.metadata_big_2,
+                                metadata_big_3: record.metadata_big_3,
                                 source: record.source
                             },
                             { upsert: true, new: true }
@@ -804,6 +819,70 @@ async function removeOrphanVectors(pineconeIndex) {
     }
 }
 
+async function checkSingleRowHealth(pineconeIndex, code) {
+    try {
+        logger.info(`Checking health for document with code: ${code}`);
+
+        // Get document from MongoDB
+        const mongoDoc = await Document.findOne({ code });
+        
+        // Get vector from Pinecone
+        const pineconeVector = await fetchVectorByCode(pineconeIndex, code);
+
+        console.log('\n=== Single Row Health Check Results ===\n');
+        
+        if (!mongoDoc && !pineconeVector) {
+            console.log(`❌ Document with code '${code}' not found in either MongoDB or Pinecone`);
+            return;
+        }
+
+        // Check MongoDB
+        console.log('MongoDB Status:');
+        if (mongoDoc) {
+            console.log('  ✅ Document exists');
+            console.log(`  File Name: ${mongoDoc.fileName}`);
+            console.log(`  Code: ${mongoDoc.code}`);
+        } else {
+            console.log('  ❌ Document not found');
+        }
+
+        // Check Pinecone
+        console.log('\nPinecone Status:');
+        if (pineconeVector) {
+            console.log('  ✅ Vector exists');
+            console.log(`  File Name: ${pineconeVector.metadata?.fileName || 'Not set'}`);
+            console.log(`  Code: ${pineconeVector.metadata?.code || 'Not set'}`);
+        } else {
+            console.log('  ❌ Vector not found');
+        }
+
+        // Overall health assessment
+        console.log('\nHealth Assessment:');
+        if (mongoDoc && pineconeVector) {
+            const metadataMatch = mongoDoc.fileName === pineconeVector.metadata?.fileName;
+            if (metadataMatch) {
+                console.log('✅ Row is healthy - exists in both systems with matching metadata');
+            } else {
+                console.log('⚠️  Row exists in both systems but metadata differs:');
+                console.log(`  MongoDB fileName: ${mongoDoc.fileName}`);
+                console.log(`  Pinecone fileName: ${pineconeVector.metadata?.fileName}`);
+            }
+        } else {
+            console.log('❌ Row is unhealthy - missing from one system:');
+            if (mongoDoc) console.log('  - Exists in MongoDB but missing from Pinecone');
+            if (pineconeVector) console.log('  - Exists in Pinecone but missing from MongoDB');
+        }
+
+    } catch (error) {
+        logger.error('Error checking single row health:', {
+            message: error.message,
+            stack: error.stack,
+            code
+        });
+        throw error;
+    }
+}
+
 async function main() {
     try {
         // Parse command line arguments
@@ -818,30 +897,34 @@ async function main() {
             fileArg.split('=')[1] : 
             args[args.indexOf('--file') + 1];
 
+        // Find code for single row check
+        const codeArg = args.find(arg => arg.startsWith('--code='));
+        const code = codeArg ? codeArg.split('=')[1] : null;
+
         logger.info('Starting with options:', {
             repair: shouldRepair,
             auto: isAuto,
             removeOrphans,
-            file: filePath || 'none'
+            file: filePath || 'none',
+            code: code || 'none'
         });
 
         // Initialize services
         const pineconeIndex = await initServices();
 
-        if (removeOrphans) {
-            await removeOrphanVectors(pineconeIndex);
-            return;
-        }
-
-        // Repair metadata if requested
         if (shouldRepair) {
             if (!filePath) {
                 logger.error('--file argument is required when using --repair');
-                console.log('Usage: node db-health.js [--repair --file=<path/to/csv> [--auto]] [--remove-orphan-vectors]');
+                console.log('Usage: node db-health.js [--repair --file=<path/to/csv> [--auto]] [--remove-orphan-vectors] [--code=<document-code>]');
                 return;
             }
             logger.info(`Starting repair with auto mode: ${isAuto}`);
-            await repairMetadata(pineconeIndex, filePath, { auto: isAuto });
+            await repairMetadata(pineconeIndex, filePath, { auto: isAuto, code });
+        } else if (code) {
+            // If code is provided without repair, do single row health check
+            await checkSingleRowHealth(pineconeIndex, code);
+        } else if (removeOrphans) {
+            await removeOrphanVectors(pineconeIndex);
         } else {
             await runHealthCheck();
         }
@@ -855,7 +938,6 @@ async function main() {
         await closeServices();
     }
 }
-
 
 // Run the script
 main();
