@@ -29,6 +29,10 @@ export const template = `
                     <option value="\\t">Tab</option>
                 </select>
             </div>
+            <div>
+                <label for="namespace">Namespace:</label>
+                <input type="text" id="namespace" name="namespace" placeholder="Enter namespace (default: 'default')" />
+            </div>
             <button onclick="uploadFile()" 
                     class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-500">
                 Upload

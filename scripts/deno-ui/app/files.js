@@ -107,6 +107,7 @@ async function uploadFile() {
     const baseUrl = document.getElementById('baseUrl').value;
     const fileInput = document.getElementById('csvFile');
     const delimiter = document.getElementById('delimiter').value;
+    const namespace = document.getElementById('namespace').value || 'default';
     const error = document.getElementById('error');
     const progress = document.getElementById('uploadProgress');
     const progressBar = document.getElementById('uploadProgressBar');
@@ -128,7 +129,7 @@ async function uploadFile() {
         status.textContent = 'Uploading...';
         progressBar.style.width = '0%';
 
-        const response = await fetch(`${baseUrl}/api/csv/upload`, {
+        const response = await fetch(`${baseUrl}/api/csv/upload?namespace=${namespace}`, {
             method: 'POST',
             headers: {
                 'Authorization': getAuthHeaders().Authorization
@@ -155,4 +156,3 @@ async function uploadFile() {
         progressBar.style.width = '0%';
     }
 }
-

@@ -148,49 +148,33 @@ async function upsertVectors(pineconeIndex, vectors) {
     }
 }
 
-async function fetchVectorByCode(pineconeIndex, code) {
+async function fetchVectorByCode(pineconeIndex, code, namespace = 'default') {
     try {
         // Get vector dimension for zero vector
         const dim = await getVectorDimension();
-        //const zeroVector = new Array(dim).fill(0);
+        const zeroVector = new Array(dim).fill(0);
 
-        // Query by id with zero vector
-        const response = await pineconeIndex.query({
-            id: code,
-            //filter: { code },
+        // Query by code with zero vector
+        const response = await pineconeIndex.namespace(namespace).query({
+            vector: zeroVector,
+            filter: { code },
             topK: 1,
-            includeMetadata: true,
-            includeValues: true // Make sure to get vector values
+            includeMetadata: true
         });
 
-        const match = response.matches[0];
-        if (!match) {
-            //logger.warn(`No vector found for code: ${code}`);
+        if (!response.matches || response.matches.length === 0) {
             return null;
         }
 
-        if (!match.values) {
-            logger.error(`Vector found but no values for code: ${code}`);
-            return null;
-        }
-
-        // Validate vector dimension
-        if (match.values.length !== dim) {
-            logger.error(`Invalid vector dimension for ${code}: got ${match.values.length}, expected ${dim}`);
-            return null;
-        }
-
-        return {
-            id: match.id,
-            values: match.values,
-            metadata: match.metadata
-        };
+        return response.matches[0];
     } catch (error) {
-        logger.error(`Error fetching vector for code ${code}:`, {
+        logger.error('Error fetching vector by code:', {
+            code,
+            namespace,
             message: error.message,
             stack: error.stack
         });
-        return null;
+        throw error;
     }
 }
 
@@ -208,7 +192,7 @@ async function promptUser(message) {
     });
 }
 
-async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, code: null }) {
+async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, code: null, namespace: 'default' }) {
     try {
         // Extract fileName from csvPath
         const fileName = csvPath.split('/').pop();
@@ -247,7 +231,7 @@ async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, c
         for (const [index, batch] of batches.entries()) {
             try {
                 logger.info(`Processing batch ${index + 1}/${batches.length} (${batch.length} records)`);
-                await processBatch(pineconeIndex, batch.map(record => ({ ...record, fileName })), options.auto);
+                await processBatch(pineconeIndex, batch.map(record => ({ ...record, fileName })), options.auto, options.namespace);
             } catch (error) {
                 logger.error(`Error processing batch ${index + 1}:`, error);
                 throw error;
@@ -266,196 +250,173 @@ async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, c
 
 
 
-async function processBatch(pineconeIndex, batch, isAuto = false) {
+async function processBatch(pineconeIndex, batch, isAuto = false, namespace = 'default') {
     try {
         // Display the batch
         console.log('Repair', batch.length, 'records?');
+        console.log('Sample:', JSON.stringify(batch[0], null, 2));
 
-        // If not auto, prompt for confirmation
+        let shouldProceed = isAuto;
         if (!isAuto) {
-            const answer = await promptUser('(y/N): ');
-            if (answer.toLowerCase() !== 'y') {
-                logger.info('Skipping batch');
-                return;
-            }
-        } else {
-            logger.info('Auto mode enabled, processing batch without confirmation');
+            const answer = await promptUser('Proceed with repair? (y/n): ');
+            shouldProceed = answer.toLowerCase() === 'y';
         }
 
-        const FETCH_BATCH_SIZE = 20;
-        const PARALLEL_BATCH_SIZE = 5;
-        const expectedDim = await getVectorDimension();
-        logger.info(`Expected vector dimension: ${expectedDim}`);
+        if (!shouldProceed) {
+            console.log('Skipping batch');
+            return;
+        }
 
-        // Process in batches of 20
-        for (let i = 0; i < batch.length; i += FETCH_BATCH_SIZE) {
-            const currentBatch = batch.slice(i, i + FETCH_BATCH_SIZE);
-            logger.info(`Processing batch ${Math.floor(i / FETCH_BATCH_SIZE) + 1}/${Math.ceil(batch.length / FETCH_BATCH_SIZE)} (${currentBatch.length} records)`);
+        logger.info(`Processing batch of ${batch.length} records`);
 
-            // Process records in parallel batches of 5
-            const vectorsToUpsert = [];
+        // Process in smaller parallel batches to avoid overwhelming the system
+        const PARALLEL_BATCH_SIZE = 10;
+        for (let i = 0; i < batch.length; i += PARALLEL_BATCH_SIZE) {
+            const currentBatch = batch.slice(i, i + PARALLEL_BATCH_SIZE);
+            logger.info(`Processing sub-batch ${Math.floor(i/PARALLEL_BATCH_SIZE) + 1}/${Math.ceil(batch.length/PARALLEL_BATCH_SIZE)} (${currentBatch.length} records)`);
+
+            // Process each record in the current batch in parallel
             for (let j = 0; j < currentBatch.length; j += PARALLEL_BATCH_SIZE) {
                 const parallelBatch = currentBatch.slice(j, j + PARALLEL_BATCH_SIZE);
 
                 // Fetch vectors for current batch
-                const vectorPromises = parallelBatch.map(record => fetchVectorByCode(pineconeIndex, record.code));
+                const vectorPromises = parallelBatch.map(record => fetchVectorByCode(pineconeIndex, record.code, namespace));
                 const existingVectors = await Promise.all(vectorPromises);
 
                 const parallelVectors = existingVectors.slice(j, j + PARALLEL_BATCH_SIZE);
 
+                // Process each record in parallel
                 await Promise.all(parallelBatch.map(async (record, index) => {
                     const existingVector = parallelVectors[index];
                     try {
-                        // Check MongoDB document
-                        let doc = await Document.findOne({ code: record.code }).lean();
-
-                        // Always update/create document with fileName
-                        logger.info(`Upserting MongoDB document for code: ${record.code} with fileName: ${record.fileName}`);
-                        doc = await Document.findOneAndUpdate(
-                            { code: record.code },
-                            {
-                                code: record.code,
-                                fileName: record.fileName,
-                                metadata_small: record.metadata_small,
-                                metadata_big_1: record.metadata_big_1,
-                                metadata_big_2: record.metadata_big_2,
-                                metadata_big_3: record.metadata_big_3,
-                                source: record.source
-                            },
-                            { upsert: true, new: true }
-                        );
-
-                        // Extract essential metadata
-                        const metadata = {
+                        // Prepare document data
+                        const documentData = {
                             code: record.code,
+                            namespace: namespace,
                             fileName: record.fileName,
+                            metadata_small: record.metadata_small,
+                            metadata_big_1: record.metadata_big_1,
+                            metadata_big_2: record.metadata_big_2,
+                            metadata_big_3: record.metadata_big_3
+                        };
+
+                        // Try to find and update/create document
+                        let doc;
+                        try {
+                            doc = await Document.findOneAndUpdate(
+                                { code: record.code, namespace: namespace },
+                                documentData,
+                                { upsert: true, new: true }
+                            );
+                        } catch (error) {
+                            if (error.code === 11000) {
+                                logger.warn(`Duplicate key detected for code: ${record.code}. Attempting to resolve...`);
+                                
+                                try {
+                                    // Find the existing document
+                                    const existingDoc = await Document.findOne({ code: record.code });
+                                    
+                                    if (existingDoc) {
+                                        if (existingDoc.namespace === namespace) {
+                                            // Update the existing document
+                                            doc = await Document.findOneAndUpdate(
+                                                { _id: existingDoc._id },
+                                                documentData,
+                                                { new: true }
+                                            );
+                                            logger.info(`Updated existing document for code: ${record.code} in namespace: ${namespace}`);
+                                        } else {
+                                            // Document exists in a different namespace, create new one
+                                            await Document.deleteOne({ code: record.code, namespace: namespace });
+                                            doc = await Document.create(documentData);
+                                            logger.info(`Created new document for code: ${record.code} in namespace: ${namespace}`);
+                                        }
+                                    } else {
+                                        // No document found, try creating again
+                                        doc = await Document.create(documentData);
+                                        logger.info(`Created new document for code: ${record.code} in namespace: ${namespace}`);
+                                    }
+                                } catch (retryError) {
+                                    logger.error(`Failed to resolve duplicate key for code: ${record.code}`, {
+                                        error: retryError.message,
+                                        stack: retryError.stack
+                                    });
+                                    throw retryError;
+                                }
+                            } else {
+                                throw error;
+                            }
+                        }
+
+                        // Get vector for the document
+                        const embedding = await embedDocument(record.metadata_small);
+                        if (!embedding) {
+                            logger.error('Failed to get embedding for document:', {
+                                code: record.code,
+                                metadata_small: record.metadata_small
+                            });
+                            return;
+                        }
+
+                        // Prepare metadata
+                        const metadata = {
+                            fileName: record.fileName,
+                            code: record.code,
                             metadata_small: record.metadata_small
                         };
 
-                        if (!existingVector) {
-                            // Re-embed the document with both code and metadata_small
-                            const embedding = await embedDocument(record.code, record.metadata_small);
+                        // Update or create vector
+                        if (existingVector) {
+                            logger.info('Updating existing vector:', {
+                                id: existingVector.id,
+                                code: record.code,
+                                oldMetadata: existingVector.metadata,
+                                newMetadata: metadata
+                            });
 
-                            if (!embedding) {
-                                logger.error(`Failed to generate embedding for ${record.code}`);
-                                return;
-                            }
-
-                            // Check embedding dimension
-                            if (embedding.length !== expectedDim) {
-                                logger.error(`Invalid embedding dimension for ${record.code}: got ${embedding.length}, expected ${expectedDim}`);
-                                return;
-                            }
-
-                            vectorsToUpsert.push({
-                                id: record.code,
-                                values: embedding,
+                            await pineconeIndex.namespace(namespace).update({
+                                id: existingVector.id,
                                 metadata
                             });
                         } else {
-                            // Check existing vector dimension
-                            if (existingVector.values.length !== expectedDim) {
-                                logger.error(`Invalid existing vector dimension for ${record.code}: got ${existingVector.values.length}, expected ${expectedDim}`);
-                                return;
-                            }
-
-                            // Check if vector has fileName in metadata
-                            if (!existingVector.metadata?.fileName) {
-                                logger.info(`Fixing orphan vector ${existingVector.id} with fileName: ${record.fileName}`);
-                                try {
-                                    // Log metadata before update
-                                    logger.debug('Updating vector metadata:', {
-                                        id: existingVector.id,
-                                        currentMetadata: existingVector.metadata,
-                                        newMetadata: metadata
-                                    });
-
-                                    await pineconeIndex.update({
-                                        id: existingVector.id,
-                                        setMetadata: metadata
-                                    });
-                                    logger.info(`Successfully updated metadata for orphan vector ${existingVector.id}`);
-                                } catch (error) {
-                                    logger.error(`Failed to update metadata for orphan vector ${existingVector.id}:`, {
-                                        error: {
-                                            name: error.name,
-                                            message: error.message,
-                                            stack: error.stack
-                                        },
-                                        vector: {
-                                            id: existingVector.id,
-                                            metadata: existingVector.metadata,
-                                            newMetadata: metadata
-                                        },
-                                        record
-                                    });
-                                }
-                            }
-
-                            vectorsToUpsert.push({
-                                id: existingVector.id,
-                                values: existingVector.values,
+                            logger.info('Creating new vector:', {
+                                code: record.code,
                                 metadata
                             });
+
+                            await pineconeIndex.namespace(namespace).upsert([{
+                                id: record.code,
+                                values: embedding,
+                                metadata
+                            }]);
                         }
                     } catch (error) {
-                        logger.error(`Error processing record: ${record.code}`, {
-                            error: {
-                                name: error.name,
-                                message: error.message,
-                                stack: error.stack
-                            },
+                        logger.error(`Error processing record:`, {
                             record,
-                            existingVector
+                            error: error.message,
+                            stack: error.stack
                         });
+                        throw error;
                     }
                 }));
+
+                // Add small delay between parallel batches to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
-
-            // Upsert vectors for current batch
-            if (vectorsToUpsert.length > 0) {
-                logger.info(`Upserting ${vectorsToUpsert.length} vectors`);
-                const firstVector = vectorsToUpsert[0];
-                logger.debug(`First vector: id=${firstVector.id}, dimension=${firstVector.values.length}`);
-                logger.debug('First vector metadata:', firstVector.metadata);
-
-                try {
-                    const success = await upsertVectors(pineconeIndex, vectorsToUpsert);
-                    if (success) {
-                        logger.info(`Successfully processed ${vectorsToUpsert.length} vectors in current batch`);
-                    }
-                } catch (error) {
-                    logger.error('Failed to upsert vectors:', {
-                        error: {
-                            name: error.name,
-                            message: error.message,
-                            stack: error.stack
-                        },
-                        firstVector,
-                        totalVectors: vectorsToUpsert.length
-                    });
-                }
-            } else {
-                logger.warn('No vectors to update in current batch');
-            }
-
-            // Add small delay between batches
-            await new Promise(resolve => setTimeout(resolve, 100));
         }
+
+        logger.info('Batch processing completed successfully');
     } catch (error) {
         logger.error('Error processing batch:', {
-            error: {
-                name: error.name,
-                message: error.message,
-                stack: error.stack
-            },
+            error: error.message,
+            stack: error.stack,
             batchSize: batch.length
         });
         throw error;
     }
 }
 
-async function getMongoHealth() {
+async function getMongoHealth(namespace = 'default') {
     try {
         // Ensure MongoDB connection
         await connectToMongoDB();
@@ -483,24 +444,26 @@ async function getMongoHealth() {
     }
 }
 
-async function getPineconeHealth() {
+async function getPineconeHealth(namespace = 'default') {
     try {
         const pineconeIndex = await initPinecone();
         logger.info('Connected to Pinecone');
 
         // Get overall stats first
-        const stats = await pineconeIndex.describeIndexStats();
+        const stats = await pineconeIndex.describeIndexStats({
+            filter: {}
+        });
         logger.debug('Pinecone stats:', stats);
 
         // Get vectors with their metadata
         const vectorsByFile = new Map();
-        const uniqueFileNames = (await Document.distinct('fileName')) || [];
+        const uniqueFileNames = (await Document.distinct('fileName', { namespace })) || [];
 
         // For each file, get the codes from MongoDB
         for (const fileName of uniqueFileNames) {
             try {
                 // Get codes for this file
-                const codes = await Document.find({ fileName }).distinct('code');
+                const codes = await Document.find({ fileName, namespace }).distinct('code');
                 logger.debug(`Found ${codes.length} codes for ${fileName}`);
 
                 // Get vector dimension for zero vector
@@ -508,7 +471,7 @@ async function getPineconeHealth() {
                 const zeroVector = new Array(dim).fill(0);
 
                 // Query by codes with zero vector
-                const response = await pineconeIndex.query({
+                const response = await pineconeIndex.namespace(namespace).query({
                     vector: zeroVector,
                     filter: { fileName },
                     topK: codes.length,
@@ -538,10 +501,11 @@ async function getPineconeHealth() {
         }
 
         return {
-            totalVectors: stats.totalVectorCount,
+            totalVectors: stats.namespaces[namespace]?.vectorCount || 0,
             vectorsWithFileName: Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
-            orphanedVectors: stats.totalVectorCount - Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
-            vectorsByFile: Object.fromEntries(vectorsByFile)
+            orphanedVectors: (stats.namespaces[namespace]?.vectorCount || 0) - Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
+            vectorsByFile: Object.fromEntries(vectorsByFile),
+            namespace
         };
     } catch (error) {
         logger.error('Error getting Pinecone health:', error);
@@ -549,10 +513,10 @@ async function getPineconeHealth() {
     }
 }
 
-async function logExtraMongoDocuments(fileName) {
+async function logExtraMongoDocuments(fileName, namespace = 'default') {
     try {
         // Get all documents for this file
-        const mongoDocs = await Document.find({ fileName }).lean();
+        const mongoDocs = await Document.find({ fileName, namespace }).lean();
         
         // Get vector dimension for zero vector
         const dim = await getVectorDimension();
@@ -568,7 +532,7 @@ async function logExtraMongoDocuments(fileName) {
         // Check each MongoDB document
         for (const doc of mongoDocs) {
             // Query Pinecone for this document
-            const response = await pineconeIndex.query({
+            const response = await pineconeIndex.namespace(namespace).query({
                 vector: zeroVector,
                 filter: { code: doc.code },
                 topK: 1,
@@ -596,7 +560,7 @@ async function logExtraMongoDocuments(fileName) {
     }
 }
 
-async function runHealthCheck() {
+async function runHealthCheck(namespace = 'default') {
     try {
         logger.info('Running health check...');
 
@@ -605,8 +569,8 @@ async function runHealthCheck() {
 
         // Get health information from both systems
         const [mongoHealth, pineconeHealth] = await Promise.all([
-            getMongoHealth(),
-            getPineconeHealth()
+            getMongoHealth(namespace),
+            getPineconeHealth(namespace)
         ]);
 
         console.log('\n=== Health Check Results ===\n');
@@ -691,7 +655,7 @@ async function runHealthCheck() {
         if (discrepancyFiles.length > 0) {
             logger.info('Logging extra MongoDB documents...');
             for (const fileName of discrepancyFiles) {
-                await logExtraMongoDocuments(fileName);
+                await logExtraMongoDocuments(fileName, namespace);
             }
         }
 
@@ -725,7 +689,7 @@ async function closeServices() {
     logger.info('MongoDB connection closed');
 }
 
-async function getOrphanVectors(pineconeIndex) {
+async function getOrphanVectors(pineconeIndex, namespace = 'default') {
     try {
         logger.info('Finding orphan vectors...');
         
@@ -734,11 +698,10 @@ async function getOrphanVectors(pineconeIndex) {
         const zeroVector = new Array(dim).fill(0);
         
         // Query all vectors
-        const response = await pineconeIndex.query({
+        const response = await pineconeIndex.namespace(namespace).query({
             vector: zeroVector,
-            topK: 10000, // Adjust if needed
-            includeMetadata: true,
-            includeValues: false
+            topK: 10000, // Adjust this value based on your needs
+            includeMetadata: true
         });
 
         if (!response.matches) {
@@ -746,13 +709,11 @@ async function getOrphanVectors(pineconeIndex) {
             return [];
         }
 
-        // Find vectors without fileName in metadata
-        const orphanVectors = response.matches.filter(match => !match.metadata?.fileName);
-        logger.info(`Found ${orphanVectors.length} orphan vectors`);
-        
-        return orphanVectors;
+        // Filter vectors that don't have fileName in metadata
+        return response.matches.filter(vector => !vector.metadata?.fileName);
     } catch (error) {
-        logger.error('Error finding orphan vectors:', {
+        logger.error('Error getting orphan vectors:', {
+            namespace,
             message: error.message,
             stack: error.stack
         });
@@ -760,12 +721,12 @@ async function getOrphanVectors(pineconeIndex) {
     }
 }
 
-async function removeOrphanVectors(pineconeIndex) {
+async function removeOrphanVectors(pineconeIndex, namespace = 'default') {
     try {
         logger.info('Starting orphan vector removal...');
 
         // Get orphan vectors
-        const orphanVectors = await getOrphanVectors(pineconeIndex);
+        const orphanVectors = await getOrphanVectors(pineconeIndex, namespace);
         if (orphanVectors.length === 0) {
             logger.info('No orphan vectors found');
             return;
@@ -795,7 +756,7 @@ async function removeOrphanVectors(pineconeIndex) {
             logger.info(`Deleting batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(orphanVectors.length/BATCH_SIZE)} (${ids.length} vectors)`);
             
             try {
-                await pineconeIndex.deleteMany(ids);
+                await pineconeIndex.namespace(namespace).deleteMany(ids);
                 logger.info(`Successfully deleted ${ids.length} vectors`);
             } catch (error) {
                 logger.error(`Error deleting batch:`, {
@@ -819,15 +780,15 @@ async function removeOrphanVectors(pineconeIndex) {
     }
 }
 
-async function checkSingleRowHealth(pineconeIndex, code) {
+async function checkSingleRowHealth(pineconeIndex, code, namespace = 'default') {
     try {
         logger.info(`Checking health for document with code: ${code}`);
 
         // Get document from MongoDB
-        const mongoDoc = await Document.findOne({ code });
+        const mongoDoc = await Document.findOne({ code, namespace });
         
         // Get vector from Pinecone
-        const pineconeVector = await fetchVectorByCode(pineconeIndex, code);
+        const pineconeVector = await fetchVectorByCode(pineconeIndex, code, namespace);
 
         console.log('\n=== Single Row Health Check Results ===\n');
         
@@ -901,12 +862,17 @@ async function main() {
         const codeArg = args.find(arg => arg.startsWith('--code='));
         const code = codeArg ? codeArg.split('=')[1] : null;
 
+        // Find namespace - support both --ns=namespace and --namespace=namespace formats
+        const nsArg = args.find(arg => arg.startsWith('--ns=') || arg.startsWith('--namespace='));
+        const namespace = nsArg ? nsArg.split('=')[1] : 'default';
+
         logger.info('Starting with options:', {
             repair: shouldRepair,
             auto: isAuto,
             removeOrphans,
             file: filePath || 'none',
-            code: code || 'none'
+            code: code || 'none',
+            namespace
         });
 
         // Initialize services
@@ -915,18 +881,18 @@ async function main() {
         if (shouldRepair) {
             if (!filePath) {
                 logger.error('--file argument is required when using --repair');
-                console.log('Usage: node db-health.js [--repair --file=<path/to/csv> [--auto]] [--remove-orphan-vectors] [--code=<document-code>]');
+                console.log('Usage: node db-health.js [--repair --file=<path/to/csv> [--auto]] [--remove-orphan-vectors] [--code=<document-code>] [--ns=<namespace>]');
                 return;
             }
-            logger.info(`Starting repair with auto mode: ${isAuto}`);
-            await repairMetadata(pineconeIndex, filePath, { auto: isAuto, code });
+            logger.info(`Starting repair with auto mode: ${isAuto}, namespace: ${namespace}`);
+            await repairMetadata(pineconeIndex, filePath, { auto: isAuto, code, namespace });
         } else if (code) {
             // If code is provided without repair, do single row health check
-            await checkSingleRowHealth(pineconeIndex, code);
+            await checkSingleRowHealth(pineconeIndex, code, namespace);
         } else if (removeOrphans) {
-            await removeOrphanVectors(pineconeIndex);
+            await removeOrphanVectors(pineconeIndex, namespace);
         } else {
-            await runHealthCheck();
+            await runHealthCheck(namespace);
         }
     } catch (error) {
         logger.error('Error in main:', {

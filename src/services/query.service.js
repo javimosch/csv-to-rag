@@ -5,9 +5,9 @@ import { Document } from '../models/document.model.js';
 import { logger } from '../utils/logger.js';
 
 export class QueryService {
-  static async performSimilaritySearch(query, limit = 5) {
+  static async performSimilaritySearch(query, limit = 5, namespace = 'default') {
     try {
-      logger.info('Starting similarity search for query:', { query });
+      logger.info('Starting similarity search for query:', { query, namespace });
       const pineconeIndex = await initPinecone();
       const openai = getOpenAI();
       
@@ -19,21 +19,24 @@ export class QueryService {
       logger.info('Query embedding generated successfully');
 
       logger.info('Performing Pinecone vector search');
-      const searchResults = await pineconeIndex.query({
+      const searchResults = await pineconeIndex.namespace(namespace).query({
         vector: queryEmbedding.data[0].embedding,
         topK: limit,
         includeMetadata: true
       });
       logger.info('Pinecone search completed', { 
-        matchCount: searchResults.matches?.length || 0 
+        matchCount: searchResults.matches?.length || 0,
+        namespace 
       });
 
       logger.info('Fetching documents from MongoDB');
       const documents = await Document.find({
-        code: { $in: searchResults.matches.map(match => match.metadata.code) }
+        code: { $in: searchResults.matches.map(match => match.metadata.code) },
+        namespace
       });
       logger.info('MongoDB documents retrieved', { 
-        documentCount: documents.length 
+        documentCount: documents.length,
+        namespace 
       });
 
       return { searchResults, documents };

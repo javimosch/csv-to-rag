@@ -1,6 +1,6 @@
 # Database Health Check and Repair Tool
 
-The `db-health.js` script is a utility tool designed to monitor and maintain the health of MongoDB documents and Pinecone vectors. It provides functionality to check the synchronization between MongoDB and Pinecone, and repair any inconsistencies in metadata.
+The `db-health.js` script is a utility tool designed to monitor and maintain the health of MongoDB documents and Pinecone vectors. It provides functionality to check the synchronization between MongoDB and Pinecone, and repair any inconsistencies in metadata. This can also be used to upload/embed new files to both databases by using the repair mode.
 
 ## Features
 
@@ -44,6 +44,8 @@ The repair process will:
 2. Update MongoDB documents with correct fileName and metadata
 3. Fix orphaned vectors by setting their fileName metadata
 4. Update all vector metadata to ensure consistency
+
+Note: This mode can be used to upload/embed new files to both databases even if no data is present in mongo/pinecone.
 
 ## Health Check Output
 

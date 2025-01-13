@@ -19,13 +19,20 @@ router.post('/upload', upload.single('csvFile'), validateCsv, async (req, res, n
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
+    const namespace = req.query.namespace || 'default';
+    
     // Start async processing
-    const result = await CSVService.processFileAsync(req.file.buffer, req.file.originalname);
+    const result = await CSVService.processFileAsync(
+      req.file.buffer, 
+      req.file.originalname,
+      namespace
+    );
     
     res.status(202).json({
       message: 'CSV file upload started',
       jobId: result.jobId,
-      fileName: result.fileName
+      fileName: result.fileName,
+      namespace: result.namespace
     });
   } catch (error) {
     logger.error('Error in CSV upload:', error);

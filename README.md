@@ -40,7 +40,7 @@ This Node.js application implements a Retrieval-Augmented Generation (RAG) syste
   curl -X GET http://localhost:3000/csv/list
   ```
 
-### Update CSV Data
+### Update CSV Data 
 - **PUT** `/csv/update/:id`
 - **Description**: Update existing CSV data.
 - **Curl Example**:
@@ -110,4 +110,14 @@ Note: Requires Deno to be installed.
 ```bash
 docker build -t javimosch/csv-to-rag-backend:
 1.0 -f Dockerfile.backend .
+```
+
+## Namespaces (NEW)
+
+The recommended way to upload data is to use namespaces in the Upload route or by using CLI (db-health.js)
+
+## Upload data using CLI
+
+```bash
+node ./scripts/db-health.js --repair --file fileName.csv --auto --ns fileName
 ```

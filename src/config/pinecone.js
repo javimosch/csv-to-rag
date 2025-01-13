@@ -8,10 +8,10 @@ export async function initPinecone() {
 
   try {
     const pinecone = new Pinecone({
-      apiKey: process.env.PINECONE_API_KEY
+      apiKey: process.env.PINECONE_API_KEY,
     });
     
-    return pinecone.index(process.env.PINECONE_INDEX);
+    return pinecone.index(process.env.PINECONE_INDEX, process.env.PINECONE_HOST);
   } catch (error) {
     logger.error('Failed to initialize Pinecone', 'initPinecone', {
       error: error.message,
