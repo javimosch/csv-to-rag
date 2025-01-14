@@ -11,7 +11,7 @@ csv-to-rag-ui
 .pnpm-debug.log*
 *.csv
 citipav*
-gdmv2*
+gdmv2-source.md
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .env*

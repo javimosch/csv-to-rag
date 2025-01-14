@@ -4,7 +4,9 @@ import { marked } from 'marked';
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
-import { program } from 'commander';
+import { Command } from 'commander';
+
+const program = new Command();
 
 program
   .option('-i, --input <file>', 'Input markdown file')
@@ -13,12 +15,18 @@ program
   .option('-m, --media-dir <dir>', 'Directory to save media files', 'images')
   .option('--group-by-md-tag <tag>', 'Group content by markdown heading level (e.g., ##)', '')
   .option('--encode-metadata', 'Encode metadata fields in base64')
+  .option('--format-codefetch', 'Convert markdown representing a codebase')
   .parse();
 
 const options = program.opts();
 
 if (!options.input) {
   console.error('Error: Input file is required');
+  process.exit(1);
+}
+
+if (options.formatCodefetch && options.groupByMdTag) {
+  console.error('Error: --format-codefetch cannot be used in conjunction with --group-by-md-tag');
   process.exit(1);
 }
 
@@ -194,6 +202,99 @@ function processToken(token) {
   }
 }
 
+// Function to parse the markdown structure and convert it to the desired format
+function parseCodebaseMarkdown(markdownContent) {
+  const tokens = marked.lexer(markdownContent);
+  let projectStructure = {};
+  let dirStack = [projectStructure];
+  let currentDepth = 0;
+  let csvRows = [];
+  let fileContents = {};
+
+  // First pass: Extract file contents from code blocks
+  let currentFile = null;
+  tokens.forEach(token => {
+    if (token.type === 'heading') {
+      currentFile = token.text.trim();
+    } else if (token.type === 'code' && currentFile) {
+      fileContents[currentFile] = token.text;
+      currentFile = null;
+    }
+  });
+
+  // Second pass: Parse directory structure from first code block
+  const structureBlock = tokens.find(t => t.type === 'code' && t.text.includes('Project Structure'));
+  if (!structureBlock) {
+    throw new Error('Could not find project structure in markdown');
+  }
+
+  const lines = structureBlock.text.split('\n');
+  lines.forEach(line => {
+    const trimmedLine = line.trim();
+    
+    if (line.startsWith('├──') || line.startsWith('└──')) {
+      const fileName = line.replace(/^[├└]──\s*/, '').trim();
+      dirStack[dirStack.length - 1][fileName] = 'file';
+      const path = dirStack.map(d => Object.keys(d)[0]).join('/');
+      const content = fileContents[fileName] || '';
+      addCSVRow(fileName, 'file', path, content);
+    } else if (line.startsWith('│')) {
+      // Continue in the current directory
+    } else if (trimmedLine) {
+      // New directory detected
+      const dirName = trimmedLine;
+      const depth = line.search(/\S/); // Get indentation level
+      
+      if (depth > currentDepth) {
+        // Going deeper - create new directory
+        const newDir = {};
+        dirStack[dirStack.length - 1][dirName] = newDir;
+        dirStack.push(newDir);
+        currentDepth = depth;
+        addCSVRow(dirName, 'directory', dirStack.map(d => Object.keys(d)[0]).join('/'));
+      } else if (depth < currentDepth) {
+        // Going up - pop directories until we reach the correct level
+        while (dirStack.length > 1 && depth < currentDepth) {
+          dirStack.pop();
+          currentDepth = line.search(/\S/);
+        }
+        // Create new directory at current level
+        const newDir = {};
+        dirStack[dirStack.length - 1][dirName] = newDir;
+        dirStack.push(newDir);
+        currentDepth = depth;
+        addCSVRow(dirName, 'directory', dirStack.map(d => Object.keys(d)[0]).join('/'));
+      } else {
+        // Same level - replace current directory
+        const newDir = {};
+        dirStack[dirStack.length - 1][dirName] = newDir;
+        dirStack[dirStack.length - 1] = newDir;
+        addCSVRow(dirName, 'directory', dirStack.map(d => Object.keys(d)[0]).join('/'));
+      }
+    }
+  });
+
+  return csvRows;
+
+  function addCSVRow(name, type, path, content = '') {
+    if (type === 'file') {
+      console.log(`Parsing ${name} into row (Mode: codebase)`);
+    }
+    csvRows.push({
+      code: generateHumanReadableId(type, name),
+      metadata_small: `${type}: ${name}`,
+      metadata_big_1: JSON.stringify({
+        name,
+        type,
+        path,
+        content: type === 'file' ? content : undefined
+      }),
+      metadata_big_2: JSON.stringify({}),
+      metadata_big_3: JSON.stringify({})
+    });
+  }
+}
+
 async function processMarkdown(inputPath, mediaDir) {
   try {
     const content = await fs.readFile(inputPath, 'utf-8');
@@ -205,6 +306,10 @@ async function processMarkdown(inputPath, mediaDir) {
     if (options.groupByMdTag) {
       const targetLevel = getHeadingLevel(options.groupByMdTag);
       return processMarkdownGrouped(tokens, targetLevel);
+    }
+
+    if (options.formatCodefetch) {
+      return parseCodebaseMarkdown(content);
     }
 
     // Original non-grouped processing
