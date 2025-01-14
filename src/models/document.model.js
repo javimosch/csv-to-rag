@@ -25,7 +25,8 @@ const documentSchema = new mongoose.Schema({
   },
   namespace: {
     type: String,
-    default: 'default'
+    default: 'default',
+    required:true
   },
   timestamp: {
     type: Date,

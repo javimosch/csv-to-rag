@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { initPinecone } from '../config/pinecone.js';
 import { getOpenAI, getOpenRouter } from '../config/openai.js';
 import { Document } from '../models/document.model.js';
-import { logger } from '../utils/logger.js';
+import { logger, completionLogger } from '../utils/logger.js';
 
 export class QueryService {
   static async performSimilaritySearch(query, limit = 5, namespace = 'default') {
@@ -62,12 +62,22 @@ export class QueryService {
           timestamp: new Date().toISOString()
         });
         
+        const messages = [
+          { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
+          { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
+        ];
+
+        completionLogger.info('Sending messages to completions:', {
+          messages: [
+            { role: 'system', content: process.env.LLM_SYSTEM_PROMPT },
+            { role: 'user', content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
+          ],
+          timestamp: new Date().toISOString()
+        });
+
         const completion = await openrouter.chat.completions.create({
           model: primaryModel,
-          messages: [
-            { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
-            { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
-          ]
+          messages
         });
         
         logger.info('OpenRouter response received', {
@@ -117,12 +127,19 @@ export class QueryService {
               timestamp: new Date().toISOString()
             });
 
+            const fallbackMessages = [
+              { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
+              { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
+            ];
+
+            completionLogger.info('Sending messages to completions:', {
+              messages: fallbackMessages,
+              timestamp: new Date().toISOString()
+            });
+
             const fallbackCompletion = await openrouter.chat.completions.create({
               model: fallbackModel,
-              messages: [
-                { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
-                { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
-              ]
+              messages: fallbackMessages
             });
             
             logger.info('Fallback model response received', {

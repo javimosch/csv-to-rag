@@ -11,7 +11,8 @@ program
   .option('-o, --output <file>', 'Output CSV file', 'output.csv')
   .option('-d, --delimiter <delimiter>', 'CSV delimiter', ';')
   .option('-m, --media-dir <dir>', 'Directory to save media files', 'images')
-  .option('--group-by-md-tag <tag>', 'Group content by markdown heading level (e.g., ##)', '')
+  .option('--overlap-percentage <percentage>', 'Percentage of context overlap between chunks', '20')
+  .option('--max-metadata-size <size>', 'Maximum metadata size in tokens', '4860')
   .option('--encode-metadata', 'Encode metadata fields in base64')
   .option('--format-codefetch', 'Convert markdown representing a codebase')
   .parse();
@@ -23,8 +24,17 @@ if (!options.input) {
   process.exit(1);
 }
 
-if (options.formatCodefetch && options.groupByMdTag) {
-  console.error('Error: --format-codefetch cannot be used in conjunction with --group-by-md-tag');
+// Validate overlap percentage
+const overlapPercentage = parseInt(options.overlapPercentage);
+if (isNaN(overlapPercentage) || overlapPercentage < 0 || overlapPercentage > 100) {
+  console.error('Error: Overlap percentage must be between 0 and 100');
+  process.exit(1);
+}
+
+// Validate metadata size
+const maxMetadataSize = parseInt(options.maxMetadataSize);
+if (isNaN(maxMetadataSize) || maxMetadataSize <= 0) {
+  console.error('Error: Maximum metadata size must be a positive number');
   process.exit(1);
 }
 
@@ -81,78 +91,160 @@ function parseTreeView(treeContent) {
   return fileMap;
 }
 
-async function parseMarkdownFile(inputPath) {
-  const content = await fs.readFile(inputPath, 'utf-8');
+function parseMarkdownContent(content) {
   const lines = content.split('\n');
-  const csvRows = [];
-  let state = 'start';
-  let treeViewLines = [];
-  let currentFilePath = '';
-  let codeLines = [];
-  let fileMap = new Map();
+  const chunks = [];
+  let currentChunk = '';
+  let currentTitle = '';
+  let inParagraph = false;
+  let overlapSize = 0;
+  let previousChunkEnd = '';
+
+  // Calculate overlap size based on max metadata size
+  const maxChunkSize = options.maxMetadataSize * 4; // Approximate token to character ratio
+  overlapSize = Math.floor(maxChunkSize * (options.overlapPercentage / 100));
 
   for (const line of lines) {
-    if (state === 'start' && line.startsWith('```')) {
-      state = 'tree-view';
+    const trimmed = line.trim();
+    
+    // Skip empty lines
+    if (!trimmed) continue;
+
+    // Handle titles
+    if (trimmed.startsWith('#')) {
+      // Save current chunk if exists
+      if (currentChunk) {
+        const chunkContent = currentChunk.trim();
+        chunks.push({
+          title: currentTitle,
+          content: previousChunkEnd + chunkContent
+        });
+        
+        // Store the end of this chunk for overlap
+        previousChunkEnd = chunkContent.slice(-overlapSize);
+        currentChunk = '';
+      }
+      currentTitle = trimmed.replace(/^#+\s*/, '');
       continue;
     }
 
-    if (state === 'tree-view') {
-      if (line.startsWith('```')) {
-        state = 'file-path';
-        fileMap = parseTreeView(treeViewLines.join('\n'));
-        continue;
-      }
-      treeViewLines.push(line);
-      continue;
+    // Handle paragraphs
+    if (!inParagraph) {
+      currentChunk += `${currentTitle ? `${currentTitle}\n` : ''}`;
+      inParagraph = true;
     }
+    currentChunk += `${line}\n`;
 
-    if (state === 'file-path') {
-      if (!line.trim()) continue;
+    // Check if we need to split the chunk
+    if (currentChunk.length >= maxChunkSize) {
+      const chunkContent = currentChunk.trim();
+      chunks.push({
+        title: currentTitle,
+        content: previousChunkEnd + chunkContent
+      });
       
-      if (line.startsWith('```')) {
-        state = 'code-block';
-        continue;
-      }
-      
-      currentFilePath = line.trim();
-      continue;
-    }
-
-    if (state === 'code-block') {
-      if (line.startsWith('```')) {
-        // End of code block
-        const fullPath = fileMap.get(currentFilePath) || currentFilePath;
-        const codeContent = codeLines.join('\n');
-        
-        const row = {
-          code: generateHumanReadableId('file', fullPath),
-          metadata_small: codeContent.split('\n').slice(0, 3).join('\n'),
-          metadata_big_1: JSON.stringify({
-            name: currentFilePath,
-            type: 'file',
-            path: fullPath,
-            content: codeContent,
-            valid: !!codeContent
-          }),
-          metadata_big_2: JSON.stringify({}),
-          metadata_big_3: JSON.stringify({})
-        };
-        
-        csvRows.push(row);
-        
-        // Reset for next file
-        currentFilePath = '';
-        codeLines = [];
-        state = 'file-path';
-        continue;
-      }
-      
-      codeLines.push(line);
+      // Store the end of this chunk for overlap
+      previousChunkEnd = chunkContent.slice(-overlapSize);
+      currentChunk = '';
+      inParagraph = false;
     }
   }
 
-  return csvRows;
+  // Add final chunk
+  if (currentChunk) {
+    chunks.push({
+      title: currentTitle,
+      content: previousChunkEnd + currentChunk.trim()
+    });
+  }
+
+  return chunks;
+}
+
+async function parseMarkdownFile(inputPath) {
+  const content = await fs.readFile(inputPath, 'utf-8');
+  
+  if (options.formatCodefetch) {
+    const lines = content.split('\n');
+    const csvRows = [];
+    let state = 'start';
+    let treeViewLines = [];
+    let currentFilePath = '';
+    let codeLines = [];
+    let fileMap = new Map();
+
+    for (const line of lines) {
+      if (state === 'start' && line.startsWith('```')) {
+        state = 'tree-view';
+        continue;
+      }
+
+      if (state === 'tree-view') {
+        if (line.startsWith('```')) {
+          state = 'file-path';
+          fileMap = parseTreeView(treeViewLines.join('\n'));
+          continue;
+        }
+        treeViewLines.push(line);
+        continue;
+      }
+
+      if (state === 'file-path') {
+        if (!line.trim()) continue;
+        
+        if (line.startsWith('```')) {
+          state = 'code-block';
+          continue;
+        }
+        
+        currentFilePath = line.trim();
+        continue;
+      }
+
+      if (state === 'code-block') {
+        if (line.startsWith('```')) {
+          // End of code block
+          const fullPath = fileMap.get(currentFilePath) || currentFilePath;
+          const codeContent = codeLines.join('\n');
+          
+          const row = {
+            code: generateHumanReadableId('file', fullPath),
+            metadata_small: codeContent.split('\n').slice(0, 3).join('\n'),
+            metadata_big_1: codeContent,
+            metadata_big_2: currentFilePath,
+            metadata_big_3: fullPath
+          };
+          
+          // Skip row if only code field has value
+          if (row.metadata_small || row.metadata_big_1 || row.metadata_big_2 || row.metadata_big_3) {
+            csvRows.push(row);
+          }
+          
+          // Reset for next file
+          currentFilePath = '';
+          codeLines = [];
+          state = 'file-path';
+          continue;
+        }
+        
+        codeLines.push(line);
+      }
+    }
+
+    return csvRows;
+  }
+
+  // Handle regular markdown content
+  const chunks = parseMarkdownContent(content);
+  return chunks
+    .map(chunk => ({
+      code: generateHumanReadableId('content', chunk.title || chunk.content),
+      metadata_small: chunk.content.substring(0, options.maxMetadataSize),
+      metadata_big_1: chunk.content,
+      metadata_big_2: '',
+      metadata_big_3: ''
+    }))
+    .filter(row => row.metadata_small || row.metadata_big_1 || row.metadata_big_2 || row.metadata_big_3);
 }
 
 async function writeCSV(data, outputPath, delimiter) {
@@ -163,15 +255,16 @@ async function writeCSV(data, outputPath, delimiter) {
     ...data.map(row => {
       return headers.map(header => {
         let value = row[header] || '';
-        
-        if (typeof value === 'object') {
-          value = JSON.stringify(value);
-        }
-        
         if (options.encodeMetadata && header.startsWith('metadata_')) {
-          value = Buffer.from(value).toString('base64');
+          value = Buffer.from(value.toString()).toString('base64');
         }
         
+        // Escape line breaks and quotes
+        value = value.toString()
+          .replace(/\n/g, '\\n')
+          .replace(/"/g, '""');
+          
+        return value.includes(delimiter) || value.includes('"') ? `"${value}"` : value;
         return value.includes(delimiter) ? `"${value}"` : value;
       }).join(delimiter);
     })

@@ -45,13 +45,56 @@ async function clearPineconeData(fileName = null, namespace = 'default') {
       } else {
         logger.info(`No vectors found for fileName: ${fileName}`);
       }
+    } else if (namespace !== 'default') {
+      // Use zero vector trick to fetch all vectors in namespace
+      const zeroVector = new Array(VECTOR_DIM).fill(0);
+      
+      // Query all vectors in namespace
+      const response = await index.namespace(namespace).query({
+        vector: zeroVector,
+        topK: 10000, // Adjust if needed
+        includeMetadata: true
+      });
+
+      if (response.matches && response.matches.length > 0) {
+        // Delete vectors in batches
+        const BATCH_SIZE = 100;
+        const vectorIds = response.matches.map(match => match.id);
+        
+        for (let i = 0; i < vectorIds.length; i += BATCH_SIZE) {
+          const batch = vectorIds.slice(i, i + BATCH_SIZE);
+          await index.namespace(namespace).deleteMany(batch);
+          logger.info(`Deleted batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(vectorIds.length/BATCH_SIZE)} (${batch.length} vectors)`);
+        }
+        
+        logger.info(`Successfully deleted ${vectorIds.length} vectors in namespace: ${namespace}`);
+      } else {
+        logger.info(`No vectors found in namespace: ${namespace}`);
+      }
     } else {
-      // Delete all vectors in the index
-      await index.deleteAll();
-      logger.info('Successfully cleared all data from Pinecone');
+      // Prompt user for confirmation before deleting all vectors
+      const { confirm } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirm',
+          message: 'WARNING: You are about to delete all vectors in the index. Do you want to proceed?',
+          default: false
+        }
+      ]);
+
+      if (confirm) {
+        // Delete all vectors in the index
+        await index.deleteAll();
+        logger.info('Successfully cleared all data from Pinecone');
+      } else {
+        logger.info('Operation cancelled by the user.');
+      }
     }
   } catch (error) {
-    logger.error('Error clearing Pinecone data:', error);
+    logger.error(`Error clearing Pinecone data: (${namespace})`, {
+      message: error.message,
+      stack: error.stack
+    });
     throw error;
   }
 }
@@ -64,17 +107,22 @@ async function clearMongoDBData(fileName = null, namespace = 'default') {
       // Delete documents for specific fileName
       const result = await Document.deleteMany({ fileName, namespace });
       logger.info(`Deleted ${result.deletedCount} documents for fileName: ${fileName}`);
+    } else if (namespace !== 'default') {
+      // Delete documents for specific namespace
+      const result = await Document.deleteMany({ namespace });
+      logger.info(`Deleted ${result.deletedCount} documents in namespace: ${namespace}`);
     } else {
+      logger.warn('Clearing all collections is currently disabled. No collections were dropped.');
+
       // Get all collections
       const collections = await mongoose.connection.db.collections();
       
       // Drop each collection
       for (const collection of collections) {
-        await collection.drop();
-        logger.info(`Dropped collection: ${collection.collectionName}`);
+        logger.warn(`Skipping drop for collection: ${collection.collectionName}`);
       }
       
-      logger.info('Successfully cleared all data from MongoDB');
+      logger.info('No data cleared from MongoDB due to disabled feature.');
     }
   } catch (error) {
     logger.error('Error clearing MongoDB data:', error);
@@ -93,28 +141,12 @@ async function main() {
     const nsArg = args.find(arg => arg.startsWith('--ns=') || arg.startsWith('--namespace='));
     const namespace = nsArg ? nsArg.split('=')[1] : 'default';
 
-    if (!fileNameArg) {
-      const { confirmFileName } = await inquirer.prompt([
-        {
-          type: 'confirm',
-          name: 'confirmFileName',
-          message: 'WARNING: You have not provided a fileName. Do you want to proceed without it?',
-          default: false
-        }
-      ]);
-
-      if (!confirmFileName) {
-        logger.info('Operation cancelled due to missing fileName');
-        return;
-      }
-    }
-
     if (!nsArg) {
       const { confirmNamespace } = await inquirer.prompt([
         {
           type: 'confirm',
           name: 'confirmNamespace',
-          message: 'WARNING: You have not provided a namespace. Do you want to proceed without it?',
+          message: 'WARNING: You have not provided a namespace. Do you want to proceed with the default namespace?',
           default: false
         }
       ]);
@@ -148,7 +180,9 @@ async function main() {
         {
           type: 'confirm',
           name: 'confirm',
-          message: 'Are you sure you want to clear ALL data from both MongoDB and Pinecone?',
+          message: namespace !== 'default'
+            ? `Are you sure you want to clear all data in namespace: ${namespace}?`
+            : 'Are you sure you want to clear ALL data from both MongoDB and Pinecone?',
           default: false
         }
       ]);
@@ -159,8 +193,25 @@ async function main() {
       }
 
       logger.info('Clearing all data...');
-      await clearMongoDBData();
-      await clearPineconeData();
+
+      if (namespace === 'default' || !namespace) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: 'WARNING: You are about to clear all data in the default namespace. Do you want to proceed?',
+            default: false
+          }
+        ]);
+
+        if (!confirm) {
+          logger.info('Operation cancelled');
+          return;
+        }
+      }
+
+      await clearMongoDBData(null, namespace);
+      await clearPineconeData(null, namespace);
     }
 
     logger.info('Data clearing completed successfully');

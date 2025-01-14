@@ -219,7 +219,12 @@ async function promptUser(message) {
     });
 }
 
-async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, code: null, namespace: 'default' }) {
+async function repairMetadata(pineconeIndex, csvPath, options = {
+    auto: false,
+    code: null,
+    namespace: 'default',
+    repairMongoOnly: false
+}) {
     try {
         // Extract fileName from csvPath
         const fileName = csvPath.split('/').pop();
@@ -258,7 +263,7 @@ async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, c
         for (const [index, batch] of batches.entries()) {
             try {
                 logger.info(`Processing batch ${index + 1}/${batches.length} (${batch.length} records)`);
-                await processBatch(pineconeIndex, batch.map(record => ({ ...record, fileName })), options.auto, options.namespace);
+                await processBatch(pineconeIndex, batch.map(record => ({ ...record, fileName })), options.auto, options.namespace, options.repairMongoOnly);
             } catch (error) {
                 logger.error(`Error processing batch ${index + 1}:`, error);
                 throw error;
@@ -277,7 +282,7 @@ async function repairMetadata(pineconeIndex, csvPath, options = { auto: false, c
 
 
 
-async function processBatch(pineconeIndex, batch, isAuto = false, namespace = 'default') {
+async function processBatch(pineconeIndex, batch, isAuto = false, namespace = 'default', repairMongoOnly = false) {
     try {
         // Display the batch
         console.log('Repair', batch.length, 'records?');
@@ -375,47 +380,50 @@ async function processBatch(pineconeIndex, batch, isAuto = false, namespace = 'd
                             }
                         }
 
-                        // Get vector for the document
-                        const embedding = await embedDocument(record.metadata_small);
-                        if (!embedding) {
-                            logger.error('Failed to get embedding for document:', {
+                        // Skip Pinecone operations if repairMongoOnly is true
+                        if (!repairMongoOnly) {
+                            // Get vector for the document
+                            const embedding = await embedDocument(record.metadata_small);
+                            if (!embedding) {
+                                logger.error('Failed to get embedding for document:', {
+                                    code: record.code,
+                                    metadata_small: record.metadata_small
+                                });
+                                return;
+                            }
+
+                            // Prepare metadata
+                            const metadata = {
+                                fileName: record.fileName,
                                 code: record.code,
                                 metadata_small: record.metadata_small
-                            });
-                            return;
-                        }
+                            };
 
-                        // Prepare metadata
-                        const metadata = {
-                            fileName: record.fileName,
-                            code: record.code,
-                            metadata_small: record.metadata_small
-                        };
+                            // Update or create vector
+                            if (existingVector) {
+                                logger.info('Updating existing vector:', {
+                                    id: existingVector.id,
+                                    code: record.code,
+                                    oldMetadata: existingVector.metadata,
+                                    newMetadata: metadata
+                                });
 
-                        // Update or create vector
-                        if (existingVector) {
-                            logger.info('Updating existing vector:', {
-                                id: existingVector.id,
-                                code: record.code,
-                                oldMetadata: existingVector.metadata,
-                                newMetadata: metadata
-                            });
+                                await pineconeIndex.namespace(namespace).update({
+                                    id: existingVector.id,
+                                    metadata
+                                });
+                            } else {
+                                logger.info('Creating new vector:', {
+                                    code: record.code,
+                                    metadata
+                                });
 
-                            await pineconeIndex.namespace(namespace).update({
-                                id: existingVector.id,
-                                metadata
-                            });
-                        } else {
-                            logger.info('Creating new vector:', {
-                                code: record.code,
-                                metadata
-                            });
-
-                            await pineconeIndex.namespace(namespace).upsert([{
-                                id: record.code,
-                                values: embedding,
-                                metadata
-                            }]);
+                                await pineconeIndex.namespace(namespace).upsert([{
+                                    id: record.code,
+                                    values: embedding,
+                                    metadata
+                                }]);
+                            }
                         }
                     } catch (error) {
                         logger.error(`Error processing record:`, {
@@ -471,74 +479,70 @@ async function getMongoHealth(namespace = 'default') {
     }
 }
 
-async function getPineconeHealth(namespace = 'default') {
+async function getPineconeHealth() {
     try {
         const pineconeIndex = await initPinecone();
         logger.info('Connected to Pinecone');
 
-        // Get overall stats first
-        const stats = await pineconeIndex.describeIndexStats({
-            filter: {}
-        });
+        // Get overall stats for all namespaces
+        const stats = await pineconeIndex.describeIndexStats();
         logger.debug('Pinecone stats:', stats);
 
-        // Get vectors with their metadata
-        const vectorsByFile = new Map();
-        const uniqueFileNames = (await Document.distinct('fileName', { namespace })) || [];
+        // Ensure we have namespaces data
+        if (!stats?.namespaces) {
+            logger.warn('No namespaces found in Pinecone stats');
+            return {};
+        }
 
-        // For each file, get the codes from MongoDB
-        for (const fileName of uniqueFileNames) {
+        const namespaceStats = {};
+        
+        // Process each namespace
+        for (const [namespace, nsStats] of Object.entries(stats.namespaces)) {
             try {
-                // Get codes for this file
-                const codes = await Document.find({ fileName, namespace }).distinct('code');
-                logger.debug(`Found ${codes.length} codes for ${fileName}`);
+                const vectorsByFile = new Map();
+                const uniqueFileNames = (await Document.distinct('fileName', { namespace })) || [];
 
-                // Get vector dimension for zero vector
-                const dim = await getVectorDimension();
-                const zeroVector = new Array(dim).fill(0);
+                // Process each file in the namespace
+                for (const fileName of uniqueFileNames) {
+                    try {
+                        const codes = await Document.find({ fileName, namespace }).distinct('code');
+                        const dim = await getVectorDimension();
+                        const zeroVector = new Array(dim).fill(0);
 
-                // Query by codes with zero vector
-                const response = await pineconeIndex.namespace(namespace).query({
-                    vector: zeroVector,
-                    filter: { fileName },
-                    topK: codes.length,
-                    includeMetadata: true
-                });
+                        const response = await pineconeIndex.namespace(namespace).query({
+                            vector: zeroVector,
+                            filter: { fileName },
+                            topK: codes.length,
+                            includeMetadata: true
+                        });
 
-                let foundVectors = 0;
-                let missingFileNameVectors = [];
-
-                if (response.matches) {
-                    foundVectors = response.matches.length;
-                    missingFileNameVectors = response.matches.filter(match => !match.metadata?.fileName);
+                        const foundVectors = response.matches?.length || 0;
+                        vectorsByFile.set(fileName, foundVectors);
+                    } catch (error) {
+                        logger.error(`Error processing file ${fileName} in namespace ${namespace}:`, error);
+                        continue;
+                    }
                 }
 
-                if (missingFileNameVectors.length > 0) {
-                    logger.debug(`Vectors missing fileName in metadata:`, missingFileNameVectors);
-                }
-
-                logger.debug(`Found ${foundVectors} vectors with fileName for ${fileName}`);
-                vectorsByFile.set(fileName, foundVectors);
-
-                // Add small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 100));
+                namespaceStats[namespace] = {
+                    totalVectors: nsStats.vectorCount || 0,
+                    vectorsWithFileName: Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
+                    orphanedVectors: (nsStats.vectorCount || 0) - Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
+                    vectorsByFile: Object.fromEntries(vectorsByFile)
+                };
             } catch (error) {
-                logger.error(`Error getting health for ${fileName}:`, error);
+                logger.error(`Error processing namespace ${namespace}:`, error);
+                continue;
             }
         }
 
-        return {
-            totalVectors: stats.namespaces[namespace]?.vectorCount || 0,
-            vectorsWithFileName: Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
-            orphanedVectors: (stats.namespaces[namespace]?.vectorCount || 0) - Array.from(vectorsByFile.values()).reduce((a, b) => a + b, 0),
-            vectorsByFile: Object.fromEntries(vectorsByFile),
-            namespace
-        };
+        return namespaceStats || {};
     } catch (error) {
         logger.error('Error getting Pinecone health:', error);
         throw error;
     }
-}
+} 
+
 
 async function logExtraMongoDocuments(fileName, namespace = 'default') {
     try {
@@ -608,16 +612,30 @@ async function runHealthCheck(namespace = 'default') {
             console.log(`  ${fileName}: ${count} documents`);
         });
 
+        console.log('Pinecone Health:', pineconeHealth);
+
+        if (!pineconeHealth || typeof pineconeHealth !== 'object') {
+            logger.error('Pinecone health data is not valid:', pineconeHealth);
+            return;
+        }
+
+
         console.log('\nPinecone Vector Counts:');
         console.log(`Total Vectors:          ${pineconeHealth.totalVectors || 0}`);
         console.log(`Vectors with fileName:  ${pineconeHealth.vectorsWithFileName || 0}`);
         console.log(`Orphaned Vectors:       ${pineconeHealth.orphanedVectors || 0}`);
 
         console.log('\nVectors by File:');
-        Object.entries(pineconeHealth.vectorsByFile).forEach(([fileName, count]) => {
-            const safeFileName = fileName || 'Unknown File';
-            console.log(`  ${safeFileName}: ${count} vectors`);
-        });
+        for (const [namespace, healthData] of Object.entries(pineconeHealth)) {
+            if (healthData.vectorsByFile) {
+                Object.entries(healthData.vectorsByFile).forEach(([fileName, count]) => {
+                    const safeFileName = fileName || 'Unknown File';
+                    console.log(`  ${safeFileName}: ${count} vectors in namespace ${namespace}`);
+                });
+            } else {
+                console.log(`No vectors found for namespace: ${namespace}`);
+            }
+        }
 
         // Check for discrepancies
         console.log('\n=== Discrepancies ===\n');
@@ -625,34 +643,33 @@ async function runHealthCheck(namespace = 'default') {
 
         // Create a map for easier comparison
         const mongoCountMap = mongoHealth;
-        const pineconeCountMap = new Map(Object.entries(pineconeHealth.vectorsByFile));
-
-        // Get all unique file names
-        const allFileNames = new Set([
-            ...mongoCountMap.keys(),
-            ...Object.keys(pineconeHealth.vectorsByFile)
-        ]);
 
         // Store files with discrepancies
         const discrepancyFiles = [];
 
-        allFileNames.forEach(fileName => {
-            const mongoCount = mongoCountMap.get(fileName) || 0;
-            const pineconeCount = pineconeHealth.vectorsByFile[fileName] || 0;
+        // Iterate through each namespace in pineconeHealth
+        let totalVectors = 0
+        for (const [namespace, healthData] of Object.entries(pineconeHealth)) {
+            const vectorsByFile = healthData.vectorsByFile || {};
 
-            if (mongoCount !== pineconeCount) {
-                hasDiscrepancies = true;
-                console.log(`\n  ${fileName}:`);
-                console.log(`    MongoDB:       ${mongoCount} documents`);
-                console.log(`    Pinecone:      ${pineconeCount} vectors`);
-                console.log(`    Difference:     ${mongoCount - pineconeCount} missing in Pinecone`);
-                
-                // Add to list if MongoDB has more documents
-                if (mongoCount > pineconeCount) {
-                    discrepancyFiles.push(fileName);
+            Object.keys(vectorsByFile).forEach(fileName => {
+                const mongoCount = mongoCountMap.get(fileName) || 0;
+                const pineconeCount = vectorsByFile[fileName] || 0;
+                totalVectors+=pineconeCount
+                if (mongoCount !== pineconeCount) {
+                    hasDiscrepancies = true;
+                    console.log(`\n  ${fileName}:`);
+                    console.log(`    MongoDB:       ${mongoCount} documents`);
+                    console.log(`    Pinecone:      ${pineconeCount} vectors`);
+                    console.log(`    Difference:     ${mongoCount - pineconeCount} missing in Pinecone`);
+                    
+                    // Add to list if MongoDB has more documents
+                    if (mongoCount > pineconeCount) {
+                        discrepancyFiles.push(fileName);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         if (!hasDiscrepancies) {
             console.log('No discrepancies found. All counts match!');
@@ -661,7 +678,7 @@ async function runHealthCheck(namespace = 'default') {
         console.log('\n=== Overall Health Status ===\n');
 
         const totalMongo = Array.from(mongoCountMap.values()).reduce((a, b) => a + b, 0);
-        const totalPinecone = pineconeHealth.vectorsWithFileName;
+        const totalPinecone = totalVectors
 
         if (totalMongo === totalPinecone && !hasDiscrepancies) {
             console.log('✅ System is healthy! All document counts match.');
@@ -878,6 +895,7 @@ async function main() {
         const shouldRepair = args.includes('--repair');
         const isAuto = args.includes('--auto');
         const removeOrphans = args.includes('--remove-orphan-vectors');
+        const repairMongoOnly = args.includes('--repair-mongo-only');
 
         // Find file path - support both --file=path and --file path formats
         const fileArg = args.find(arg => arg.startsWith('--file='));
@@ -912,7 +930,7 @@ async function main() {
                 return;
             }
             logger.info(`Starting repair with auto mode: ${isAuto}, namespace: ${namespace}`);
-            await repairMetadata(pineconeIndex, filePath, { auto: isAuto, code, namespace });
+            await repairMetadata(pineconeIndex, filePath, { auto: isAuto, code, namespace, repairMongoOnly });
         } else if (code) {
             // If code is provided without repair, do single row health check
             await checkSingleRowHealth(pineconeIndex, code, namespace);
