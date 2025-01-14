@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-import { marked } from 'marked';
 import fs from 'fs/promises';
-import path from 'path';
 import crypto from 'crypto';
 import { Command } from 'commander';
 
@@ -30,11 +28,6 @@ if (options.formatCodefetch && options.groupByMdTag) {
   process.exit(1);
 }
 
-// Get heading level from markdown tag (e.g., "##" -> 2)
-function getHeadingLevel(mdTag) {
-  return mdTag.length;
-}
-
 function generateHumanReadableId(type, content) {
   const sanitized = content
     .toLowerCase()
@@ -51,295 +44,115 @@ function generateHumanReadableId(type, content) {
   return `${type}_${sanitized}_${hash}`;
 }
 
-class Section {
-  constructor(heading) {
-    this.heading = heading;
-    this.content = [];
-    this.subsections = [];
-  }
-
-  addContent(item) {
-    this.content.push(item);
-  }
-
-  addSubsection(section) {
-    this.subsections.push(section);
-  }
-
-  toCSVRow() {
-    const title = this.heading ? this.heading.text : 'Untitled Section';
-    const headingLevel = this.heading ? this.heading.depth : 0;
-    
-    // Combine all content into structured metadata
-    const contentByType = {
-      text: [],
-      list: [],
-      code: [],
-      table: [],
-      image: []
-    };
-
-    // Process main content
-    this.content.forEach(item => {
-      if (contentByType[item.type]) {
-        contentByType[item.type].push(item);
-      }
-    });
-
-    // Process subsections recursively if not being grouped
-    this.subsections.forEach(subsection => {
-      subsection.content.forEach(item => {
-        if (contentByType[item.type]) {
-          contentByType[item.type].push(item);
-        }
-      });
-    });
-
-    // Create a summary for metadata_small
-    const summary = [
-      title,
-      contentByType.text.length > 0 ? `${contentByType.text.length} paragraphs` : null,
-      contentByType.list.length > 0 ? `${contentByType.list.length} lists` : null,
-      contentByType.code.length > 0 ? `${contentByType.code.length} code blocks` : null,
-      contentByType.table.length > 0 ? `${contentByType.table.length} tables` : null,
-      contentByType.image.length > 0 ? `${contentByType.image.length} images` : null
-    ].filter(Boolean).join(' | ');
-
-    return {
-      code: generateHumanReadableId('section', title),
-      metadata_small: summary,
-      metadata_big_1: JSON.stringify({
-        title,
-        headingLevel,
-        paragraphs: contentByType.text.map(t => t.text)
-      }),
-      metadata_big_2: JSON.stringify({
-        lists: contentByType.list.map(l => l.items),
-        code: contentByType.code.map(c => c.text)
-      }),
-      metadata_big_3: JSON.stringify({
-        tables: contentByType.table.map(t => t.rows),
-        images: contentByType.image.map(i => i.href)
-      })
-    };
-  }
-}
-
-function processMarkdownGrouped(tokens, targetLevel) {
-  let currentSection = new Section(null);
-  let sections = [currentSection];
-  
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    
-    if (token.type === 'heading') {
-      if (token.depth === targetLevel) {
-        // Start a new main section
-        currentSection = new Section(token);
-        sections.push(currentSection);
-      } else if (token.depth > targetLevel) {
-        // This is a subsection
-        const subsection = new Section(token);
-        currentSection.addSubsection(subsection);
-        currentSection = subsection;
-      } else {
-        // Reset to top level for higher-level headings
-        currentSection = new Section(token);
-        sections.push(currentSection);
-      }
-    } else {
-      // Process regular content
-      const processedElement = processToken(token);
-      if (processedElement) {
-        currentSection.addContent(processedElement);
-      }
-    }
-  }
-
-  // Convert sections to CSV rows and ensure all required fields are present
-  return sections
-    .map(section => section.toCSVRow())
-    .filter(row => row.code && row.metadata_small);
-}
-
-function processToken(token) {
-  switch (token.type) {
-    case 'heading':
-      return {
-        type: 'heading',
-        text: token.text,
-        depth: token.depth
-      };
-    case 'paragraph':
-      return {
-        type: 'text',
-        text: token.text
-      };
-    case 'list':
-      return {
-        type: 'list',
-        items: token.items.map(item => item.text)
-      };
-    case 'code':
-      return {
-        type: 'code',
-        text: token.text,
-        lang: token.lang
-      };
-    case 'table':
-      return {
-        type: 'table',
-        rows: token.rows
-      };
-    case 'image':
-      return {
-        type: 'image',
-        href: token.href,
-        text: token.text
-      };
-    default:
-      return null;
-  }
-}
-
-// Function to parse the markdown structure and convert it to the desired format
-function parseCodebaseMarkdown(markdownContent) {
-  const tokens = marked.lexer(markdownContent);
-  let projectStructure = {};
-  let dirStack = [projectStructure];
+function parseTreeView(treeContent) {
+  const fileMap = new Map();
+  const lines = treeContent.split('\n');
+  let currentPath = [];
   let currentDepth = 0;
-  let csvRows = [];
-  let fileContents = {};
 
-  // First pass: Extract file contents from code blocks
-  let currentFile = null;
-  tokens.forEach(token => {
-    if (token.type === 'heading') {
-      currentFile = token.text.trim();
-    } else if (token.type === 'code' && currentFile) {
-      fileContents[currentFile] = token.text;
-      currentFile = null;
-    }
-  });
-
-  // Second pass: Parse directory structure from first code block
-  const structureBlock = tokens.find(t => t.type === 'code' && t.text.includes('Project Structure'));
-  if (!structureBlock) {
-    throw new Error('Could not find project structure in markdown');
-  }
-
-  const lines = structureBlock.text.split('\n');
   lines.forEach(line => {
-    const trimmedLine = line.trim();
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    const depth = line.search(/\S/);
     
-    if (line.startsWith('├──') || line.startsWith('└──')) {
-      const fileName = line.replace(/^[├└]──\s*/, '').trim();
-      dirStack[dirStack.length - 1][fileName] = 'file';
-      const path = dirStack.map(d => Object.keys(d)[0]).join('/');
-      const content = fileContents[fileName] || '';
-      addCSVRow(fileName, 'file', path, content);
-    } else if (line.startsWith('│')) {
-      // Continue in the current directory
-    } else if (trimmedLine) {
-      // New directory detected
-      const dirName = trimmedLine;
-      const depth = line.search(/\S/); // Get indentation level
-      
+    if (trimmed.startsWith('├──') || trimmed.startsWith('└──')) {
+      const fileName = trimmed.replace(/^[├└]──\s*/, '').trim();
+      const fullPath = [...currentPath, fileName].join('/');
+      fileMap.set(fileName, fullPath);
+    } else if (trimmed.startsWith('│')) {
+      // Continue in current directory
+    } else {
+      // Directory change
       if (depth > currentDepth) {
-        // Going deeper - create new directory
-        const newDir = {};
-        dirStack[dirStack.length - 1][dirName] = newDir;
-        dirStack.push(newDir);
+        // Going deeper
+        const dirName = trimmed;
+        currentPath.push(dirName);
         currentDepth = depth;
-        addCSVRow(dirName, 'directory', dirStack.map(d => Object.keys(d)[0]).join('/'));
       } else if (depth < currentDepth) {
-        // Going up - pop directories until we reach the correct level
-        while (dirStack.length > 1 && depth < currentDepth) {
-          dirStack.pop();
-          currentDepth = line.search(/\S/);
-        }
-        // Create new directory at current level
-        const newDir = {};
-        dirStack[dirStack.length - 1][dirName] = newDir;
-        dirStack.push(newDir);
+        // Going up
+        const levelsUp = (currentDepth - depth) / 4;
+        currentPath = currentPath.slice(0, -levelsUp);
         currentDepth = depth;
-        addCSVRow(dirName, 'directory', dirStack.map(d => Object.keys(d)[0]).join('/'));
-      } else {
-        // Same level - replace current directory
-        const newDir = {};
-        dirStack[dirStack.length - 1][dirName] = newDir;
-        dirStack[dirStack.length - 1] = newDir;
-        addCSVRow(dirName, 'directory', dirStack.map(d => Object.keys(d)[0]).join('/'));
       }
     }
   });
 
-  return csvRows;
-
-  function addCSVRow(name, type, path, content = '') {
-    if (type === 'file') {
-      console.log(`Parsing ${name} into row (Mode: codebase)`);
-    }
-    csvRows.push({
-      code: generateHumanReadableId(type, name),
-      metadata_small: `${type}: ${name}`,
-      metadata_big_1: JSON.stringify({
-        name,
-        type,
-        path,
-        content: type === 'file' ? content : undefined
-      }),
-      metadata_big_2: JSON.stringify({}),
-      metadata_big_3: JSON.stringify({})
-    });
-  }
+  return fileMap;
 }
 
-async function processMarkdown(inputPath, mediaDir) {
-  try {
-    const content = await fs.readFile(inputPath, 'utf-8');
-    const tokens = marked.lexer(content);
-    
-    // Ensure media directory exists
-    await fs.mkdir(mediaDir, { recursive: true });
+async function parseMarkdownFile(inputPath) {
+  const content = await fs.readFile(inputPath, 'utf-8');
+  const lines = content.split('\n');
+  const csvRows = [];
+  let state = 'start';
+  let treeViewLines = [];
+  let currentFilePath = '';
+  let codeLines = [];
+  let fileMap = new Map();
 
-    if (options.groupByMdTag) {
-      const targetLevel = getHeadingLevel(options.groupByMdTag);
-      return processMarkdownGrouped(tokens, targetLevel);
+  for (const line of lines) {
+    if (state === 'start' && line.startsWith('```')) {
+      state = 'tree-view';
+      continue;
     }
 
-    if (options.formatCodefetch) {
-      return parseCodebaseMarkdown(content);
+    if (state === 'tree-view') {
+      if (line.startsWith('```')) {
+        state = 'file-path';
+        fileMap = parseTreeView(treeViewLines.join('\n'));
+        continue;
+      }
+      treeViewLines.push(line);
+      continue;
     }
 
-    // Original non-grouped processing
-    const results = [];
-    for (const token of tokens) {
-      const processedElement = processToken(token);
-      if (processedElement) {
+    if (state === 'file-path') {
+      if (!line.trim()) continue;
+      
+      if (line.startsWith('```')) {
+        state = 'code-block';
+        continue;
+      }
+      
+      currentFilePath = line.trim();
+      continue;
+    }
+
+    if (state === 'code-block') {
+      if (line.startsWith('```')) {
+        // End of code block
+        const fullPath = fileMap.get(currentFilePath) || currentFilePath;
+        const codeContent = codeLines.join('\n');
+        
         const row = {
-          code: generateHumanReadableId(processedElement.type, processedElement.text || ''),
-          metadata_small: processedElement.text || '',
+          code: generateHumanReadableId('file', fullPath),
+          metadata_small: codeContent.split('\n').slice(0, 3).join('\n'),
           metadata_big_1: JSON.stringify({
-            type: processedElement.type,
-            content: processedElement.text || ''
+            name: currentFilePath,
+            type: 'file',
+            path: fullPath,
+            content: codeContent,
+            valid: !!codeContent
           }),
           metadata_big_2: JSON.stringify({}),
           metadata_big_3: JSON.stringify({})
         };
         
-        // Only add rows that have required fields
-        if (row.code && row.metadata_small) {
-          results.push(row);
-        }
+        csvRows.push(row);
+        
+        // Reset for next file
+        currentFilePath = '';
+        codeLines = [];
+        state = 'file-path';
+        continue;
       }
+      
+      codeLines.push(line);
     }
-
-    return results;
-  } catch (error) {
-    console.error('Error processing markdown:', error);
-    throw error;
   }
+
+  return csvRows;
 }
 
 async function writeCSV(data, outputPath, delimiter) {
@@ -351,17 +164,14 @@ async function writeCSV(data, outputPath, delimiter) {
       return headers.map(header => {
         let value = row[header] || '';
         
-        // Convert objects to strings if necessary
         if (typeof value === 'object') {
           value = JSON.stringify(value);
         }
         
-        // Encode metadata fields if --encode-metadata is enabled
         if (options.encodeMetadata && header.startsWith('metadata_')) {
           value = Buffer.from(value).toString('base64');
         }
         
-        // Escape delimiter in values
         return value.includes(delimiter) ? `"${value}"` : value;
       }).join(delimiter);
     })
@@ -373,7 +183,7 @@ async function writeCSV(data, outputPath, delimiter) {
 
 async function main() {
   try {
-    const data = await processMarkdown(options.input, options.mediaDir);
+    const data = await parseMarkdownFile(options.input);
     await writeCSV(data, options.output, options.delimiter);
   } catch (error) {
     console.error('Error:', error);

@@ -10,6 +10,33 @@ import { parse } from 'csv-parse';
 import { getOpenAI } from '../src/config/openai.js';
 import readline from 'readline';
 import { embedDocument } from '../src/services/embedding.service.js';
+
+function isBase64(str) {
+    try {
+        // Check if the string matches base64 pattern
+        if (!/^[A-Za-z0-9+/=]+$/.test(str)) return false;
+        
+        // Try to decode and check if it's valid UTF-8
+        const decoded = Buffer.from(str, 'base64').toString('utf-8');
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function decodeBase64IfNeeded(value) {
+    if (!value) return '';
+    if (isBase64(value)) {
+        try {
+            return Buffer.from(value, 'base64').toString('utf-8');
+        } catch (e) {
+            logger.warn('Failed to decode base64 value:', { value, error: e.message });
+            return value;
+        }
+    }
+    return value;
+}
+
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,13 +63,13 @@ async function parseCsvFile(filePath) {
                     return;
                 }
                 
-                // Treat JSON fields as strings
+                // Decode base64 metadata fields
                 const parsedRecords = records.map(record => ({
                     ...record,
-                    metadata_small: record.metadata_small || "",
-                    metadata_big_1: record.metadata_big_1 || "",
-                    metadata_big_2: record.metadata_big_2 || "",
-                    metadata_big_3: record.metadata_big_3 || ""
+                    metadata_small: decodeBase64IfNeeded(record.metadata_small || ""),
+                    metadata_big_1: decodeBase64IfNeeded(record.metadata_big_1 || ""),
+                    metadata_big_2: decodeBase64IfNeeded(record.metadata_big_2 || ""),
+                    metadata_big_3: decodeBase64IfNeeded(record.metadata_big_3 || "")
                 }));
 
                 resolve(parsedRecords);
