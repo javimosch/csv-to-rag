@@ -181,6 +181,7 @@
         "npm:inquirer@^12.3.0",
         "npm:jest@^29.7.0",
         "npm:joi@^17.13.3",
+        "npm:marked@^11.2.0",
         "npm:mongoose@^8.0.3",
         "npm:multer@^1.4.5-lts.1",
         "npm:mysql2@^3.12.0",
