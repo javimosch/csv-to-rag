@@ -54,6 +54,8 @@ export const validateCsv = (req, res, next) => {
 // Validation schema for query requests
 const querySchema = Joi.object({
   query: Joi.string().required(),
+  namespace: Joi.string().optional(),
+  onlyContext: Joi.boolean().optional().allow('true', 'false').default(false)
 });
 
 // Validation middleware for query requests

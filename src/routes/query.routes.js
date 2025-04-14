@@ -15,7 +15,9 @@ router.post('/query', validateQuery, async (req, res, next) => {
   try {
     const { query } = req.body;
     const namespace = req.query.namespace || req.body.namespace || 'default';
-    const onlyContext = req.query.onlyContext === 'true';
+    const onlyContext = Boolean(req.query.onlyContext || req.body.onlyContext);
+
+    console.debug('Query:', { query, namespace, onlyContext })
     
     const { documents } = await QueryService.performSimilaritySearch(query, 5, namespace);
     
