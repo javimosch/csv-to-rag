@@ -79,24 +79,30 @@ program
 program
   .command('query <text>')
   .description('Query the RAG system')
-  .action(async (text) => {
+  .option('--ctx', 'Only return context without LLM completion')
+  .action(async (text, options) => {
     try {
-      console.log('cli/index.js query command', { text });
+      console.log('cli/index.js query command', { text, options });
       const config = loadConfig();
-      const response = await axios.post(`${config.API_URL}/api/query`, {
+      const response = await axios.post(`${config.API_URL}/api/query${options.ctx ? '?onlyContext=true' : ''}`, {
         query: text
       }, {
         headers: {
-          'Authorization': `Bearer ${config.API_KEY}` // Added Authorization header
+          'Authorization': `Bearer ${config.API_KEY}`
         }
       });
       
-      console.log('\nAnswer:', response.data.answer);
-      console.log('\nSources:');
-      response.data.sources.forEach(source => {
-        console.log(`- ${source.fileName} (${source.namespace})`);
-        console.log(`  Context: ${source.context}`);
-      });
+      if (options.ctx) {
+        console.log('\nAnswer:','\n', response.data);
+      } else {
+        // Display answer and sources as before
+        console.log('\nAnswer:', response.data.answer);
+        console.log('\nSources:');
+        response.data.sources.forEach(source => {
+          console.log(`- ${source.fileName} (${source.namespace})`);
+          console.log(`  Context: ${source.context}`);
+        });
+      }
     } catch (error) {
       if (error.isAxiosError) {
         console.log('Error in query command:', { 

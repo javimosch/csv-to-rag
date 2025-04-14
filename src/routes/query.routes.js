@@ -15,24 +15,37 @@ router.post('/query', validateQuery, async (req, res, next) => {
   try {
     const { query } = req.body;
     const namespace = req.query.namespace || req.body.namespace || 'default';
+    const onlyContext = req.query.onlyContext === 'true';
     
-    const { searchResults, documents } = await QueryService.performSimilaritySearch(query, 5, namespace);
-    const answer = await QueryService.generateResponse(query, documents);
-
-    // Format the response to match the UI's expected format
-    res.json({
-      answer,
-      sources: documents.map(doc => ({
-        fileName: doc.fileName,
-        namespace: doc.namespace,
-        context: doc.metadata_small // Using metadata_small as context
-      }))
-    });
+    const { documents } = await QueryService.performSimilaritySearch(query, 5, namespace);
+    
+    if (onlyContext) {
+      // Return only the context without LLM completion
+      res.json(documents.map(mapRemoveKeys(['_id','__v','timestamp','fileName','namespace'])));
+    } else {
+      // Generate LLM response as before
+      const answer = await QueryService.generateResponse(query, documents);
+      res.json({
+        answer,
+        sources: documents.map(doc => ({
+          fileName: doc.fileName,
+          namespace: doc.namespace,
+          context: doc.metadata_small // Using metadata_small as context
+        }))
+      });
+    }
   } catch (error) {
     logger.error('Error in query processing:', error);
     next(error);
   }
 });
+
+const mapRemoveKeys = keysToRemove => doc => {
+  doc = doc.toJSON();
+  return Object.fromEntries(
+    Object.entries(doc).filter(([key]) => !keysToRemove.includes(key))
+  );
+}
 
 /**
  * @route POST /api/completion
