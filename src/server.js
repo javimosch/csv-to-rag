@@ -78,6 +78,10 @@ app.use('/api/csv', csvRoutes);
 app.use('/api', queryRoutes); // Now includes /completion
 app.use('/api/logs', logRoutes);
 
+app.get('/', (req, res) => {
+  res.send(`CSV to RAG API running on port ${PORT}`);
+});
+
 // Error handling
 app.use(errorHandler);
 
@@ -89,7 +93,7 @@ async function startServer() {
     await initOpenAI();
     
     app.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Server running on port http://localhost:${PORT}`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
