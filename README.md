@@ -85,8 +85,9 @@ This Node.js application implements a Retrieval-Augmented Generation (RAG) syste
   ```
 
 ## Environment Configuration
-- `OPENAI_API_KEY`: OpenAI API authentication
-- `OPENROUTER_API_KEY`: OpenRouter API authentication
+- `OPENAI_API_KEY`: OpenAI compatible API authentication
+- `OPENAI_MODEL`: available model
+- `OPENAI_MODEL_FALLBACK`: fallback model
 - `MONGODB_URI`: MongoDB connection string
 - `PINECONE_API_KEY`: Pinecone API key
 - `PINECONE_INDEX`: Pinecone index name

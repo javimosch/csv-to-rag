@@ -1,6 +1,6 @@
 # OpenAI-like Completion API
 
-This document describes the design of a new API endpoint `/api/completion` that provides LLM completion functionality, mirroring the request/response format of the OpenAI and OpenRouter completion APIs.
+This document describes the design of a new API endpoint `/api/completion` that provides LLM completion functionality, mirroring the request/response format of the OpenAI completion API.
 
 ## Endpoint
 
@@ -63,11 +63,11 @@ The API will return standard HTTP error codes for various issues:
 
 ## Usage Notes
 
-- The `model` parameter should correspond to a valid model identifier supported by the underlying LLM service (e.g., OpenRouter).
+- The `model` parameter should correspond to a valid model identifier supported by the underlying LLM service (e.g., OpenAI compatible API provider).
 - The `prompt` parameter is the text that the model will use to generate the completion.
 - If `max_tokens` is not specified, the model will use a default maximum.
 - The `temperature` parameter controls the randomness of the output.
-- The LLM completion uses the same logic as the current query route behind the scenes. Therefore, the `model` parameter in the request is ignored, and the system will use the configured LLM models as defined in the environment variables (e.g., `OPENROUTER_MODEL`, `OPENROUTER_MODEL_FALLBACK`).
+- The LLM completion uses the same logic as the current query route behind the scenes. Therefore, the `model` parameter in the request is ignored, and the system will use the configured LLM models as defined in the environment variables (e.g., `OPENAI_MODEL`, `OPENAI_MODEL_FALLBACK`).
 
 ## Example Request
 

@@ -21,7 +21,7 @@ DELETE /csv/delete/:id: Remove CSV data
 POST /query: Perform similarity search and LLM interaction
 Environment Configuration:
 OPENAI_API_KEY: OpenAI API authentication
-OPENROUTER_API_KEY: OpenRouter API authentication
+OPENAI_MODEL: OpenAI API authentication
 MONGODB_URI: MongoDB connection string
 PINECONE_API_KEY: Pinecone API key
 PINECONE_ENVIRONMENT: Pinecone environment

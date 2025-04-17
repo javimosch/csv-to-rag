@@ -1,6 +1,5 @@
-import OpenAI from 'openai';
 import { initPinecone } from '../config/pinecone.js';
-import { getOpenAI, getOpenRouter } from '../config/openai.js';
+import { getOpenAI } from '../config/openai.js';
 import { Document } from '../models/document.model.js';
 import { logger, completionLogger } from '../utils/logger.js';
 
@@ -52,12 +51,12 @@ export class QueryService {
         contextSize: context?.length || 0 
       });
       
-      const openrouter = getOpenRouter();
-      const primaryModel = process.env.CSVTORAG_OPENROUTER_MODEL||process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
-      const fallbackModel = process.env.CSVTORAG_OPENROUTER_MODEL_FALLBACK||process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
+      const openaiInstance = getOpenAI();
+      const primaryModel = process.env.CSVTORAG_OPENAI_MODEL||process.env.OPENAI_MODEL || 'google/gemini-2.0-flash-exp:free';
+      const fallbackModel = process.env.CSVTORAG_OPENAI_MODEL_FALLBACK||process.env.OPENAI_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
       
       try {
-        logger.info('Making completion request to OpenRouter', {
+        logger.info('Making completion request to openaiInstance', {
           model: primaryModel,
           timestamp: new Date().toISOString()
         });
@@ -75,19 +74,19 @@ export class QueryService {
           timestamp: new Date().toISOString()
         });
 
-        const completion = await openrouter.chat.completions.create({
+        const completion = await openaiInstance.chat.completions.create({
           model: primaryModel,
           messages
         });
         
-        logger.info('OpenRouter response received', {
+        logger.info('openaiInstance response received', {
           hasChoices: !!completion?.choices,
           choicesLength: completion?.choices?.length
         });
 
         if (!completion?.choices?.[0]?.message?.content) {
           logger.error('Invalid completion response', { completion });
-          throw new Error('Invalid completion response from OpenRouter Code: '+completion?.error?.code);
+          throw new Error('Invalid completion response from openaiInstance Code: '+completion?.error?.code);
         }
 
         return completion.choices[0].message.content;
@@ -137,7 +136,7 @@ export class QueryService {
               timestamp: new Date().toISOString()
             });
 
-            const fallbackCompletion = await openrouter.chat.completions.create({
+            const fallbackCompletion = await openaiInstance.chat.completions.create({
               model: fallbackModel,
               messages: fallbackMessages
             });
