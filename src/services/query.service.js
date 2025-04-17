@@ -53,8 +53,8 @@ export class QueryService {
       });
       
       const openrouter = getOpenRouter();
-      const primaryModel = process.env.LLM_MODEL || 'google/gemini-2.0-flash-exp:free';
-      const fallbackModel = process.env.LLM_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
+      const primaryModel = process.env.CSVTORAG_OPENROUTER_MODEL||process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-exp:free';
+      const fallbackModel = process.env.CSVTORAG_OPENROUTER_MODEL_FALLBACK||process.env.OPENROUTER_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
       
       try {
         logger.info('Making completion request to OpenRouter', {

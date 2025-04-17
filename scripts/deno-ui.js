@@ -30,8 +30,8 @@ const env = config();
 
 // Set Deno.env variables
 Deno.env.set('UI_BACKEND_URL', env.UI_BACKEND_URL || 'http://localhost:3000');
-Deno.env.set('UI_USERNAME', env.UI_USERNAME || 'admin');
-Deno.env.set('UI_PASSWORD', env.UI_PASSWORD || 'admin');
+Deno.env.set('UI_USERNAME', env.CSVTORAG_BASIC_AUTH_USER||env.BASIC_AUTH_USER||env.UI_USERNAME || 'admin');
+Deno.env.set('UI_PASSWORD', env.CSVTORAG_BASIC_AUTH_PASSWORD||env.BASIC_AUTH_PASSWORD||env.UI_PASSWORD || 'admin');
 Deno.env.set('BACKEND_API_KEY', env.BACKEND_API_KEY || 'secret');
 
 

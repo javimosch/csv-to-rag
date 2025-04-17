@@ -67,7 +67,7 @@ The API will return standard HTTP error codes for various issues:
 - The `prompt` parameter is the text that the model will use to generate the completion.
 - If `max_tokens` is not specified, the model will use a default maximum.
 - The `temperature` parameter controls the randomness of the output.
-- The LLM completion uses the same logic as the current query route behind the scenes. Therefore, the `model` parameter in the request is ignored, and the system will use the configured LLM models as defined in the environment variables (e.g., `LLM_MODEL`, `LLM_MODEL_FALLBACK`).
+- The LLM completion uses the same logic as the current query route behind the scenes. Therefore, the `model` parameter in the request is ignored, and the system will use the configured LLM models as defined in the environment variables (e.g., `OPENROUTER_MODEL`, `OPENROUTER_MODEL_FALLBACK`).
 
 ## Example Request
 
