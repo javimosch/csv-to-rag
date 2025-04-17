@@ -7,7 +7,6 @@ import { Document } from '../src/models/document.model.js';
 import { logger } from '../src/utils/logger.js';
 import fs from 'fs';
 import { parse } from 'csv-parse';
-import { getOpenAI } from '../src/config/openai.js';
 import readline from 'readline';
 import { embedDocument } from '../src/services/embedding.service.js';
 

@@ -1,5 +1,5 @@
 import { initPinecone } from '../config/pinecone.js';
-import { getOpenAI } from '../config/openai.js';
+import { getOpenAIEmbedding } from '../config/openai.js';
 import { Document } from '../models/document.model.js';
 import { logger, completionLogger } from '../utils/logger.js';
 
@@ -8,12 +8,14 @@ export class QueryService {
     try {
       logger.info('Starting similarity search for query:', { query, namespace });
       const pineconeIndex = await initPinecone();
-      const openai = getOpenAI();
+      const openai = getOpenAIEmbedding();
       
-      logger.info('Generating query embedding');
+      logger.info('Generating query embedding',{
+        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+      });
       const queryEmbedding = await openai.embeddings.create({
         input: query,
-        model: 'text-embedding-ada-002'
+        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
       });
       logger.info('Query embedding generated successfully');
 

@@ -1,4 +1,4 @@
-import { getOpenAI } from '../config/openai.js';
+import { getOpenAIEmbedding } from '../config/openai.js';
 import { initPinecone } from '../config/pinecone.js';
 import { logger } from '../utils/logger.js';
 import { Document } from '../models/document.model.js';
@@ -23,10 +23,15 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function embedDocument(code, metadata_small) {
   try {
-      const openai = getOpenAI();
+
+      console.debug('Embedding document:', {
+        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+      });
+
+      const openai = getOpenAIEmbedding();
       const response = await openai.embeddings.create({
           input: `${code}\n${metadata_small}`,
-          model: "text-embedding-ada-002"
+          model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
       });
       
       if (!response || !response.data || !response.data[0]) {
@@ -50,9 +55,13 @@ async function generateEmbeddingBatch(records, openai) {
       // Only use code and metadata_small for embeddings
       const text = `${record.code}\n${record.metadata_small}`;
       
+      console.debug('Embedding document:', {
+        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+      });
+
       const embedding = await openai.embeddings.create({
         input: text,
-        model: 'text-embedding-ada-002'
+        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
       });
 
       return {
@@ -104,7 +113,7 @@ async function saveBatchToStorage(embeddings, pineconeIndex) {
 async function generateEmbeddings(records) {
   try {
     const pineconeIndex = await initPinecone();
-    const openai = getOpenAI();
+    const openai = getOpenAIEmbedding();
     
     // Split records into smaller batches for embedding generation
     const recordBatches = chunkArray(records, EMBEDDING_BATCH_SIZE());

@@ -16,7 +16,7 @@ import { logRoutes } from './routes/log.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { setupMongoDB } from './config/mongodb.js';
 import { initPinecone } from './config/pinecone.js';
-import { initOpenAI } from './config/openai.js';
+import { initOpenAI, initOpenAIEmbedding } from './config/openai.js';
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -91,6 +91,7 @@ async function startServer() {
     await setupMongoDB();
     await initPinecone();
     await initOpenAI();
+    await initOpenAIEmbedding();
     
     app.listen(PORT, () => {
       logger.info(`Server running on port http://localhost:${PORT}`);
