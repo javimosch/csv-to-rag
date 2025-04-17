@@ -109,8 +109,7 @@ Note: Requires Deno to be installed.
 ## Docker image 
 
 ```bash
-docker build -t javimosch/csv-to-rag-backend:
-1.0 -f Dockerfile.backend .
+docker build -t javimosch/csv-to-rag-backend:1.2 -f Dockerfile.backend .
 ```
 
 ## Namespaces (NEW)
