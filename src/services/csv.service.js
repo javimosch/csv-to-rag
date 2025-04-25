@@ -407,12 +407,26 @@ export class CSVService {
 
       // Delete from Pinecone
       if (codes.length > 0) {
-        await deleteVectors(codes);
-        logger.info('Deleted vectors from Pinecone', { 
-          fileName, 
-          namespace, 
-          vectorCount: codes.length 
-        });
+        // Debug log before backend action
+        console.log(`${fileName} deleteFile Deleting vectors from Pinecone`, { data: { namespace, vectorCount: codes.length } });
+        try {
+          await deleteVectors(codes);
+          logger.info('Deleted vectors from Pinecone', { 
+            fileName, 
+            namespace, 
+            vectorCount: codes.length 
+          });
+        } catch (err) {
+          // Ignore 404 from Pinecone
+          const isAxios404 = err?.response?.status === 404;
+          if (!isAxios404) {
+            // Debug log in catch block
+            console.log(`${fileName} deleteFile Error deleting vectors from Pinecone`, { message: err.message, stack: err.stack, ...(err.response?.data && { axiosResponse: err.response.data }) });
+            throw err;
+          } else {
+            console.log(`${fileName} deleteFile Pinecone 404 ignored`, { message: err.message, stack: err.stack, ...(err.response?.data && { axiosResponse: err.response.data }) });
+          }
+        }
       }
 
       return {

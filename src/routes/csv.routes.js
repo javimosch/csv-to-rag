@@ -106,7 +106,9 @@ router.delete('/file/:fileName', async (req, res, next) => {
       });
     }
 
-    const result = await CSVService.deleteFile(fileName);
+    // Determine namespace from query (default 'default')
+    const namespace = req.query.namespace || 'default';
+    const result = await CSVService.deleteFile(fileName, namespace);
     res.json(result);
   } catch (error) {
     logger.error('Error deleting CSV file:', { 

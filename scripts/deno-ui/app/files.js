@@ -82,7 +82,7 @@ async function listFiles() {
                         </div>
                         <div class="flex flex-col gap-2 mt-2 md:mt-0">
                             <button 
-                                onclick="deleteFile('${file.fileName}')"
+                                onclick="deleteFile('${file.fileName}', '${file.namespace}')"
                                 class="text-white bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
                             >
                                 Delete
@@ -100,7 +100,7 @@ async function listFiles() {
     }
 }
 
-async function deleteFile(fileName) {
+async function deleteFile(fileName, namespace) {
     if (!confirm(`Are you sure you want to delete ${fileName}?`)) {
         return;
     }
@@ -111,7 +111,9 @@ async function deleteFile(fileName) {
     try {
         error.textContent = '';
         
-        const response = await fetch(`${baseUrl}/api/csv/file/${encodeURIComponent(fileName)}`, {
+        const response = await fetch(
+            `${baseUrl}/api/csv/file/${encodeURIComponent(fileName)}?namespace=${encodeURIComponent(namespace)}`,
+            {
             method: 'DELETE',
             headers: getAuthHeaders()
         });
