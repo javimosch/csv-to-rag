@@ -253,9 +253,13 @@ async function uploadFile() {
             return;
         }
         const formData = new FormData();
-        formData.append('file', file);
+        // Use 'csvFile' as the field name to match backend expectation
+        formData.append('csvFile', file);
         formData.append('delimiter', document.getElementById('delimiter').value);
         formData.append('namespace', namespaceInput.value.trim());
+        
+        // scripts/deno-ui/app/files.js uploadFile form data prepared
+        console.log('files.js uploadFile form data prepared',{data:{fileName: file.name, namespace: namespaceInput.value.trim()}});
 
         progress.classList.remove('hidden');
         status.textContent = 'Uploading...';
