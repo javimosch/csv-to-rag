@@ -47,6 +47,6 @@ export const template = `
                     </button>
                 </div>
             </div>
-            <div id="queryResult" class="mt-4"></div>
+            <div id="queryResult" class="mt-4 overflow-x-auto"></div>
         </div>
 </div>`;
