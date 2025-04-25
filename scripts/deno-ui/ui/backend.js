@@ -1,12 +1,6 @@
 export const template = ()=>`
 <!-- Backend Control Section -->
-<div id="backendSection" class="mb-6 bg-white rounded shadow hidden">
-    <button onclick="toggleSection('backend')" 
-            class="w-full p-4 text-left font-semibold flex items-center justify-between">
-        <span>Backend Control</span>
-        <span id="backendSectionToggle" class="section-toggle">▼</span>
-    </button>
-    <div id="backendContent" class="section-content p-4">
+<div id="backendSection" class="bg-white rounded shadow p-4 hidden">
         <div class="space-y-4">
             <div>
                 <label for="baseUrl" class="block text-sm font-medium text-gray-700 mb-1">Base URL:</label>
@@ -32,6 +26,5 @@ export const template = ()=>`
                 <div id="backendStatus" class="text-gray-600">Backend is stopped</div>
             </div>
         </div>
-    </div>
 </div>
 `;

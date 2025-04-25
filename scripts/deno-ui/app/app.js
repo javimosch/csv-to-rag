@@ -2,10 +2,14 @@
 
 // Initialize everything when the page loads
 window.addEventListener('load', () => {
-    initializeSections();
+    // Initialize tabs instead of sections
+    initializeTabs();
     loadLogsFromStorage();
     displayLogs();
     checkBackendState();
+    
+    // scripts/deno-ui/app/app.js load UI initialized
+    console.log('app.js load UI initialized', {data:{}});
     
     // Set up log scroll handler
     const logsContent = document.getElementById('logsContent');

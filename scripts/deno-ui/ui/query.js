@@ -1,12 +1,6 @@
 export const template = `
 <!-- Query Section -->
-<div class="mb-6 bg-white rounded shadow">
-    <button onclick="toggleSection('query')" 
-            class="w-full p-4 text-left font-semibold flex items-center justify-between">
-        <span>Query</span>
-        <span id="queryToggle" class="section-toggle">▼</span>
-    </button>
-    <div id="queryContent" class="section-content">
+<div class="bg-white rounded shadow p-4">
         <div class="p-4 space-y-3">
             <div>
                 <textarea id="queryInput" 
@@ -35,5 +29,4 @@ export const template = `
             </div>
             <div id="queryResult" class="mt-4"></div>
         </div>
-    </div>
 </div>`;

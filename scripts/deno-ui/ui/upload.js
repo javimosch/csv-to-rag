@@ -1,12 +1,6 @@
 export const template = `
 <!-- Upload Section -->
-<div class="mb-6 bg-white rounded shadow">
-    <button onclick="toggleSection('upload')" 
-            class="w-full p-4 text-left font-semibold flex items-center justify-between">
-        <span>Upload CSV</span>
-        <span id="uploadToggle" class="section-toggle">▼</span>
-    </button>
-    <div id="uploadContent" class="section-content">
+<div class="bg-white rounded shadow p-4">
         <div class="p-4 space-y-3">
             <div>
                 <input type="file" 
@@ -48,6 +42,5 @@ export const template = `
                 <div id="uploadStatus" class="text-sm text-gray-600 mt-1"></div>
             </div>
         </div>
-    </div>
 </div>
 `;
