@@ -9,12 +9,93 @@ function getAuthHeaders() {
     };
 }
 
+/**
+ * Load available namespaces from the backend
+ */
+async function loadNamespaces() {
+    // scripts/deno-ui/app/query.js loadNamespaces Loading available namespaces
+    console.log('query.js loadNamespaces Loading available namespaces', {data: {}});
+    
+    const baseUrl = document.getElementById('baseUrl').value;
+    const namespaceSelect = document.getElementById('queryNamespace');
+    const error = document.getElementById('error');
+    
+    try {
+        error.textContent = '';
+        
+        // Show loading state
+        const currentSelection = namespaceSelect.value;
+        namespaceSelect.innerHTML = '<option value="" disabled selected>Loading namespaces...</option>';
+        
+        const response = await fetch(`${baseUrl}/api/csv/namespaces`, {
+            method: 'GET',
+            headers: getAuthHeaders()
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Clear and repopulate the select
+            namespaceSelect.innerHTML = '<option value="" disabled selected>Select a namespace</option>';
+            
+            if (data.namespaces && data.namespaces.length > 0) {
+                data.namespaces.forEach(namespace => {
+                    const option = document.createElement('option');
+                    option.value = namespace;
+                    option.textContent = namespace;
+                    namespaceSelect.appendChild(option);
+                });
+                
+                // Restore previous selection if it exists
+                if (currentSelection && data.namespaces.includes(currentSelection)) {
+                    namespaceSelect.value = currentSelection;
+                }
+                
+                appendLog(`Loaded ${data.namespaces.length} namespaces`);
+            } else {
+                appendLog('No namespaces found. Upload a CSV file first.', 'warning');
+            }
+        } else {
+            const errorText = await response.text();
+            appendLog(`Failed to load namespaces: ${errorText}`, 'error');
+            namespaceSelect.innerHTML = '<option value="" disabled selected>Failed to load namespaces</option>';
+        }
+    } catch (error) {
+        // scripts/deno-ui/app/query.js loadNamespaces Error loading namespaces
+        console.log('query.js loadNamespaces Error loading namespaces', {data: {message: error.message, stack: error.stack}});
+        
+        appendLog(`Error loading namespaces: ${error.message}`, 'error');
+        namespaceSelect.innerHTML = '<option value="" disabled selected>Error loading namespaces</option>';
+    }
+}
+
 async function submitQuery() {
+    // scripts/deno-ui/app/query.js submitQuery Submitting query
+    console.log('query.js submitQuery Submitting query', {data: {}});
+    
     const queryInput = document.getElementById('queryInput');
+    const namespaceSelect = document.getElementById('queryNamespace');
+    const namespaceError = document.getElementById('namespaceError');
     const query = queryInput.value.trim();
+    const namespace = namespaceSelect.value;
+    
+    // Validate inputs
+    let isValid = true;
     
     if (!query) {
         appendLog('Please enter a query', 'error');
+        isValid = false;
+    }
+    
+    if (!namespace) {
+        namespaceError.classList.remove('hidden');
+        appendLog('Please select a namespace', 'error');
+        isValid = false;
+    } else {
+        namespaceError.classList.add('hidden');
+    }
+    
+    if (!isValid) {
         return;
     }
     
@@ -26,10 +107,13 @@ async function submitQuery() {
         error.textContent = '';
         queryResult.innerHTML = 'Processing query...';
         
+        // scripts/deno-ui/app/query.js submitQuery Sending query to backend
+        console.log('query.js submitQuery Sending query to backend', {data: {query, namespace}});
+        
         const response = await fetch(`${baseUrl}/api/query`, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ query })
+            body: JSON.stringify({ query, namespace })
         });
         
         if (response.ok) {
@@ -37,33 +121,61 @@ async function submitQuery() {
             displayQueryResult(result);
             appendLog('Query executed successfully');
         } else {
-            const error = await response.text();
-            appendLog(`Query failed: ${error}`, 'error');
+            const errorText = await response.text();
+            appendLog(`Query failed: ${errorText}`, 'error');
         }
     } catch (error) {
+        // scripts/deno-ui/app/query.js submitQuery Error submitting query
+        console.log('query.js submitQuery Error submitting query', {data: {message: error.message, stack: error.stack}});
+        
         appendLog(`Query failed: ${error.message}`, 'error');
     }
 }
 
 function computeCurl() {
+    // scripts/deno-ui/app/query.js computeCurl Computing curl command
+    console.log('query.js computeCurl Computing curl command', {data: {}});
+    
     const queryInput = document.getElementById('queryInput');
+    const namespaceSelect = document.getElementById('queryNamespace');
+    const namespaceError = document.getElementById('namespaceError');
     const query = queryInput.value.trim();
+    const namespace = namespaceSelect.value;
     const baseUrl = document.getElementById('baseUrl').value;
     const apiKey = document.getElementById('apiKey').value;
     
+    // Validate inputs
+    let isValid = true;
+    
     if (!query) {
         appendLog('Please enter a query first', 'error');
+        isValid = false;
+    }
+    
+    if (!namespace) {
+        namespaceError.classList.remove('hidden');
+        appendLog('Please select a namespace', 'error');
+        isValid = false;
+    } else {
+        namespaceError.classList.add('hidden');
+    }
+    
+    if (!isValid) {
         return;
     }
     
-    const curlCommand = `curl -X POST "${baseUrl}/api/query" \\
-     -H "Content-Type: application/json" \\
-     -H "Authorization: Bearer ${apiKey}" \\
-     -d '{"query": "${query.replace(/'/g, "\\'")}"}'`;
+    // Use string concatenation instead of template literals to avoid escaping issues
+    const curlCommand = 'curl -X POST "' + baseUrl + '/api/query" \\\n' +
+        '     -H "Content-Type: application/json" \\\n' +
+        '     -H "Authorization: Bearer ' + apiKey + '" \\\n' +
+        '     -d \'{"query": "' + query.replace(/'/g, "\\'") + '", "namespace": "' + namespace + '"}\'';
     
     const curlDiv = document.getElementById('curlCommand');
     curlDiv.classList.remove('hidden');
     curlDiv.querySelector('pre').textContent = curlCommand;
+    
+    // scripts/deno-ui/app/query.js computeCurl Curl command generated
+    console.log('query.js computeCurl Curl command generated', {data: {namespace}});
 }
 
 function displayQueryResult(result) {

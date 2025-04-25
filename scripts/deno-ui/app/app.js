@@ -7,6 +7,7 @@ window.addEventListener('load', () => {
     loadLogsFromStorage();
     displayLogs();
     checkBackendState();
+    loadNamespaces();
     
     // scripts/deno-ui/app/app.js load UI initialized
     console.log('app.js load UI initialized', {data:{}});

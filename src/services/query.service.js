@@ -1,5 +1,5 @@
 import { initPinecone } from '../config/pinecone.js';
-import { getOpenAIEmbedding } from '../config/openai.js';
+import { getOpenAI, getOpenAIEmbedding } from '../config/openai.js';
 import { Document } from '../models/document.model.js';
 import { logger, completionLogger } from '../utils/logger.js';
 

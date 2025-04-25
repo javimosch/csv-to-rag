@@ -421,4 +421,37 @@ export class CSVService {
     }
   }
 
+  /**
+   * Get a list of all available namespaces in the system
+   * @returns {Promise<Array<string>>} Array of unique namespace names
+   */
+  static async getNamespaces() {
+    try {
+      // scripts/deno-ui/app/csv.service.js getNamespaces Retrieving available namespaces
+      logger.info('Retrieving available namespaces', {data: {}});
+      
+      // Use MongoDB aggregation to get unique namespaces
+      const result = await Document.aggregate([
+        // Group by namespace
+        { $group: { _id: '$namespace' } },
+        // Sort alphabetically
+        { $sort: { _id: 1 } },
+        // Project to get a clean array
+        { $project: { namespace: '$_id', _id: 0 } }
+      ]);
+      
+      // Extract namespace values from result
+      const namespaces = result.map(item => item.namespace);
+      
+      logger.info('Retrieved namespaces', {data: {count: namespaces.length, namespaces}});
+      return namespaces;
+    } catch (error) {
+      logger.error('Error retrieving namespaces:', { 
+        error: error.message,
+        stack: error.stack 
+      });
+      throw error;
+    }
+  }
+
 }

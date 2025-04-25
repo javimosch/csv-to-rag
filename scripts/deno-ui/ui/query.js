@@ -2,6 +2,22 @@ export const template = `
 <!-- Query Section -->
 <div class="bg-white rounded shadow p-4">
         <div class="p-4 space-y-3">
+            <div class="mb-4">
+                <label for="queryNamespace" class="block text-sm font-medium text-gray-700 mb-1">Namespace: <span class="text-red-600" title="Required">*</span></label>
+                <div class="flex items-center">
+                    <select id="queryNamespace" 
+                            class="flex-grow p-2 border border-red-300 rounded" 
+                            required>
+                        <option value="" disabled selected>Select a namespace</option>
+                        <!-- Namespaces will be populated dynamically -->
+                    </select>
+                    <button onclick="loadNamespaces()" 
+                            class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 p-2 rounded">
+                        <span>↻</span>
+                    </button>
+                </div>
+                <div id="namespaceError" class="text-red-600 text-sm mt-1 hidden">Namespace is required</div>
+            </div>
             <div>
                 <textarea id="queryInput" 
                           placeholder="Enter your query here..."

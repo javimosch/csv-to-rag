@@ -42,6 +42,9 @@ router.post('/upload', upload.single('csvFile'), validateCsv, async (req, res, n
 
 router.get('/list', async (req, res, next) => {
   try {
+    // scripts/deno-ui/app/csv.routes.js GET /list Listing CSV files
+    console.log('csv.routes.js GET /list Listing CSV files', {data: {}});
+    
     const result = await CSVService.listCsvFiles();
     if (!result || !result.files) {
       return res.status(404).json({ error: 'No files found' });
@@ -49,6 +52,23 @@ router.get('/list', async (req, res, next) => {
     res.json(result);
   } catch (error) {
     logger.error('Error listing CSV files:', error);
+    next(error);
+  }
+});
+
+// Get all available namespaces
+router.get('/namespaces', async (req, res, next) => {
+  try {
+    // scripts/deno-ui/app/csv.routes.js GET /namespaces Retrieving available namespaces
+    console.log('csv.routes.js GET /namespaces Retrieving available namespaces', {data: {}});
+    
+    const namespaces = await CSVService.getNamespaces();
+    res.json({ namespaces });
+  } catch (error) {
+    logger.error('Error retrieving namespaces:', { 
+      message: error.message,
+      stack: error.stack 
+    });
     next(error);
   }
 });
