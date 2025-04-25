@@ -36,89 +36,75 @@ export class CSVService {
     });
 
     return new Promise((resolve, reject) => {
-      const records = [];
-      let recordCount = 0;
-      let errorCount = 0;
-      
       parse(Buffer.from(normalizedContent), {
         columns: true,
         skip_empty_lines: true,
         delimiter: dataDelimiter,
-        quote: false, // Disable quote parsing
-        escape: false, // Disable escape character handling
+        quote: false,
+        escape: false,
         relax: true,
         trim: true,
         skip_records_with_error: true,
-        on_record: async (record, { lines }) => {
+      }, (err, parsedRecords) => {
+        if (err) {
+          logger.error('CSV parsing error:', err);
+          return reject(err);
+        }
+        let errorCount = 0;
+        let recordCount = 0;
+        const records = [];
+        for (const record of parsedRecords) {
+          recordCount++;
+          if (recordCount % 100 === 0) {
+            logger.info(`Processing record ${recordCount}...`);
+          } else {
+            logger.debug(`Processing record ${recordCount}...`);
+          }
           try {
-            recordCount++;
-            if (recordCount % 100 === 0) {
-              logger.info(`Processing record ${recordCount}...`);
-            }
-            
-            // Log the raw record for debugging
-            /* logger.debug('Processing raw record:', { 
-              recordNum: recordCount,
-              record: JSON.stringify(record)
-            }); */
-            
-            // Log parsed record before validation
-            //logger.info('Parsed record:', { record });
-            
             const processedRecord = this.validateAndProcessRecord({
               ...record,
-              metadata_big_1: String(record.metadata_big_1 || '').replace(/"/g, '\"'), // Ensure as string
-              metadata_big_2: String(record.metadata_big_2 || '').replace(/"/g, '\"'), // Ensure as string
-              metadata_big_3: String(record.metadata_big_3 || '').replace(/"/g, '\"')  // Ensure as string
+              metadata_big_1: String(record.metadata_big_1 || '').replace(/"/g, '\"'),
+              metadata_big_2: String(record.metadata_big_2 || '').replace(/"/g, '\"'),
+              metadata_big_3: String(record.metadata_big_3 || '').replace(/"/g, '\"')
             }, fileName, namespace);
             if (processedRecord) {
               records.push(processedRecord);
-              /* logger.debug('Record validated and processed successfully:', { 
-                recordNum: recordCount,
-                record: JSON.stringify(processedRecord)
-              }); */
             } else {
               errorCount++;
-              logger.warn('Record validation failed:', { 
+              logger.warn('Record validation failed:', {
                 recordNum: recordCount,
                 record: JSON.stringify(record)
               });
             }
           } catch (error) {
             errorCount++;
-            logger.error('Error processing record:', { 
+            logger.error('Error processing record:', {
               recordNum: recordCount,
               error: error.message,
               record: JSON.stringify(record)
             });
           }
         }
-      })
-        .on('error', (error) => {
-          logger.error('CSV parsing error:', error);
-          reject(error);
-        })
-        .on('end', () => {
-          const duration = Date.now() - startTime;
-          logger.info('CSV processing completed', {
-            fileName,
-            namespace,
-            totalRecords: recordCount,
-            validRecords: records.length,
-            errorCount,
-            duration: `${duration}ms`
-          });
-          
-          if (records.length === 0 && recordCount > 0) {
-            logger.error('No valid records found despite having input rows', {
-              totalRecords: recordCount,
-              errorCount
-            });
-          }
-          
-          resolve(records);
+        const duration = Date.now() - startTime;
+        logger.info('CSV processing completed', {
+          fileName,
+          namespace,
+          totalRecords: recordCount,
+          validRecords: records.length,
+          errorCount,
+          duration: `${duration}ms`
         });
+        console.log('src/services/csv.service.js processCSV CSV parsing ended, resolving promise', { fileName, namespace, recordCount, validRecords: records.length });
+        if (records.length === 0 && recordCount > 0) {
+          logger.error('No valid records found despite having input rows', {
+            totalRecords: recordCount,
+            errorCount
+          });
+        }
+        resolve(records);
+      });
     });
+
   }
 
   static async processFileAsync(fileBuffer, fileName, namespace = 'default') {
@@ -185,6 +171,8 @@ export class CSVService {
       // Step 1: Parse CSV
       logger.debug('About to parse CSV file', { jobId, fileName, namespace });
       const records = await this.processCSV(fileBuffer, fileName, namespace);
+      console.log('src/services/csv.service.js processInBackground CSV parsing promise resolved', { jobId, fileName, namespace, recordCount: records.length });
+      logger.info('CSV parsing and validation completed', { jobId, fileName, namespace, recordCount: records.length });
       if (!records || records.length === 0) {
         throw new Error('No valid records found in CSV');
       }
@@ -196,10 +184,12 @@ export class CSVService {
         recordCount: records.length 
       });
 
-      // Step 2: Generate embeddings first
-      logger.info('Generating embeddings...', { jobId, fileName, namespace, recordCount: records.length });
+      // Step 2: Generate embeddings and save to Pinecone/MongoDB
+      logger.debug('About to generate embeddings', { jobId, fileName, namespace });
+      console.log('src/services/csv.service.js processInBackground Before generateEmbeddings', { jobId, fileName, namespace, recordCount: records.length });
       const embeddingResult = await generateEmbeddings(records, namespace);
-      logger.info('Embedding generation result', { jobId, ...embeddingResult });
+      console.log('src/services/csv.service.js processInBackground After generateEmbeddings', { jobId, fileName, namespace, embeddingResult });
+      logger.info('Embedding generation completed', { jobId, fileName, namespace, ...embeddingResult });
       // embeddingResult should include successful & failed counts
       if (!embeddingResult || embeddingResult.successful === 0) {
         throw new Error('No embeddings were successfully generated');
@@ -232,25 +222,24 @@ export class CSVService {
         vectorsSaved: Array.isArray(savedVectors) ? savedVectors.length : undefined
       });
 
-    } catch (error) {
+    } catch (err) {
+      console.log('src/services/csv.service.js processInBackground Error', { jobId, fileName, namespace, message: err.message, stack: err.stack, axiosData: err?.response?.data });
       logger.error('Background processing failed', { 
         jobId,
         fileName,
         namespace,
         error: {
-          message: error.message,
-          stack: error.stack
+          message: err.message,
+          stack: err.stack
         }
       });
-      
       // If we failed after saving to MongoDB but before Pinecone,
       // clean up the MongoDB records
-      if (error.message.includes('Pinecone')) {
+      if (err.message && err.message.includes('Pinecone')) {
         logger.info('Rolling back MongoDB changes...', { jobId, fileName, namespace });
         await Document.deleteMany({ fileName, namespace });
       }
-      
-      throw error;
+      throw err;
     }
   }
 
