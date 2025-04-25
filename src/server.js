@@ -1,7 +1,11 @@
 
 import dotenv from 'dotenv';
 
-dotenv.config();
+await dotenv.config();
+
+console.debug({
+  CHROMA_BASE_URL: process.env.CHROMA_BASE_URL
+})
 
 import { logger } from './utils/logger.js';
 import express from 'express';
@@ -19,8 +23,10 @@ import { setupMongoDB } from './config/mongodb.js';
 import { initPinecone } from './config/pinecone.js';
 import { initOpenAI, initOpenAIEmbedding } from './config/openai.js';
 
+
+
 // Determine vector DB provider: use Chroma if CHROMA_BASE_URL is set, else Pinecone
-const useChroma = Boolean(process.env.CHROMA_BASE_URL);
+const useChroma = Boolean(!!process.env.CHROMA_BASE_URL);
 // Validate required environment variables
 const requiredEnvVars = [
   'OPENAI_API_KEY',

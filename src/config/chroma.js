@@ -17,6 +17,7 @@ export function initChromaClient() {
   }
   // Initialize Chroma client
   chromaClientInstance = new ChromaClient({ path: baseUrl });
+  console.debug('Chroma client initialized', { baseUrl });
   return chromaClientInstance;
 }
 
@@ -27,13 +28,14 @@ export function initChromaClient() {
  * @returns {Promise<import('chromadb').Collection>} Chroma collection instance
  */
 export async function getChromaCollection(name) {
+  console.debug('Getting Chroma collection', { name });
   const client = initChromaClient();
   // Determine vector dimension, default to 1536
   const dimensions = parseInt(process.env.VECTOR_DIM || '1536', 10);
   try {
     const collection = await client.getOrCreateCollection({
       name,
-      metadata: {},
+      //metadata: {},
       dimensions,
     });
     return collection;

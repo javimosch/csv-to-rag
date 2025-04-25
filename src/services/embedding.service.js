@@ -4,13 +4,11 @@ import { logger } from '../utils/logger.js';
 import { Document } from '../models/document.model.js';
 import { getChromaCollection } from '../config/chroma.js';
 
-// Use Chroma vector store if CHROMA_BASE_URL is set
-const useChroma = Boolean(process.env.CHROMA_BASE_URL);
 
 // Get batch configuration from environment variables
-const BATCH_SIZE = ()=>parseInt(process.env.PINECONE_BATCH_SIZE || '100', 10);
-const BATCH_DELAY = ()=>parseInt(process.env.PINECONE_BATCH_DELAY || '100', 10);
-const EMBEDDING_BATCH_SIZE = ()=>parseInt(process.env.EMBEDDING_BATCH_SIZE || '20', 10);
+const BATCH_SIZE = () => parseInt(process.env.PINECONE_BATCH_SIZE || '100', 10);
+const BATCH_DELAY = () => parseInt(process.env.PINECONE_BATCH_DELAY || '100', 10);
+const EMBEDDING_BATCH_SIZE = () => parseInt(process.env.EMBEDDING_BATCH_SIZE || '20', 10);
 
 // Utility function to chunk array into batches
 function chunkArray(array, size) {
@@ -28,28 +26,28 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function embedDocument(code, metadata_small) {
   try {
 
-      console.debug('Embedding document:', {
-        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
-      });
+    console.debug('Embedding document:', {
+      model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
+    });
 
-      const openai = getOpenAIEmbedding();
-      const response = await openai.embeddings.create({
-          input: `${code}\n${metadata_small}`,
-          model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
-      });
-      
-      if (!response || !response.data || !response.data[0]) {
-          logger.error('Invalid embedding response from OpenAI:', response);
-          return null;
-      }
-      
-      return response.data[0].embedding;
-  } catch (error) {
-      logger.error(`Error generating embedding for ${code}:`, {
-          message: error.message,
-          stack: error.stack
-      });
+    const openai = getOpenAIEmbedding();
+    const response = await openai.embeddings.create({
+      input: `${code}\n${metadata_small}`,
+      model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
+    });
+
+    if (!response || !response.data || !response.data[0]) {
+      logger.error('Invalid embedding response from OpenAI:', response);
       return null;
+    }
+
+    return response.data[0].embedding;
+  } catch (error) {
+    logger.error(`Error generating embedding for ${code}:`, {
+      message: error.message,
+      stack: error.stack
+    });
+    return null;
   }
 }
 
@@ -58,14 +56,14 @@ async function generateEmbeddingBatch(records, openai) {
     try {
       // Only use code and metadata_small for embeddings
       const text = `${record.code}\n${record.metadata_small}`;
-      
+
       console.debug('Embedding document:', {
-        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+        model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
       });
 
       const embedding = await openai.embeddings.create({
         input: text,
-        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+        model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
       });
 
       return {
@@ -73,16 +71,16 @@ async function generateEmbeddingBatch(records, openai) {
         embedding: {
           id: record.code,
           values: embedding.data[0].embedding,
-          metadata: { 
+          metadata: {
             code: record.code,
             metadata_small: record.metadata_small
           }
         }
       };
     } catch (error) {
-      logger.error('Error generating embedding for record:', { 
+      logger.error('Error generating embedding for record:', {
         code: record.code,
-        error: error.message 
+        error: error.message
       });
       // Return null for failed embeddings, will be filtered out later
       return null;
@@ -97,6 +95,13 @@ async function generateEmbeddingBatch(records, openai) {
  * Save a batch of embeddings and records to the vector store and MongoDB.
  */
 async function saveBatchToStorage(embeddings, pineconeIndex) {
+
+  // Use Chroma vector store if CHROMA_BASE_URL is set
+  const useChroma = Boolean(!!process.env.CHROMA_BASE_URL);//
+
+  console.debug('Chroma vector store configuration:', { useChroma });
+
+
   console.log('src/services/embedding.service.js saveBatchToStorage Called', { embeddingsCount: embeddings.length });
   try {
     // Save records to MongoDB
@@ -135,6 +140,13 @@ async function saveBatchToStorage(embeddings, pineconeIndex) {
 }
 
 async function generateEmbeddings(records) {
+
+  // Use Chroma vector store if CHROMA_BASE_URL is set
+  const useChroma = Boolean(!!process.env.CHROMA_BASE_URL);//
+
+  console.debug('Chroma vector store configuration:', { useChroma });
+
+
   // src/services/embedding.service.js generateEmbeddings Starting embedding generation
   console.log('src/services/embedding.service.js generateEmbeddings Starting embedding generation', { totalRecords: records.length });
   try {
@@ -150,8 +162,8 @@ async function generateEmbeddings(records) {
     let processedCount = 0;
     let successCount = 0;
     let errorCount = 0;
-    
-    logger.info('Processing embeddings in batches', { 
+
+    logger.info('Processing embeddings in batches', {
       totalRecords: records.length,
       batchCount: recordBatches.length,
       batchSize: EMBEDDING_BATCH_SIZE()
@@ -161,23 +173,23 @@ async function generateEmbeddings(records) {
     for (const [index, batch] of recordBatches.entries()) {
       try {
         // src/services/embedding.service.js generateEmbeddings Processing batch
-        console.log('src/services/embedding.service.js generateEmbeddings Processing batch', { batchIndex: index+1, batchSize: batch.length });
+        console.log('src/services/embedding.service.js generateEmbeddings Processing batch', { batchIndex: index + 1, batchSize: batch.length });
         logger.info(`Processing batch ${index + 1}/${recordBatches.length}`);
-        
+
         // Generate embeddings for the batch
-        console.log('src/services/embedding.service.js generateEmbeddings Before generateEmbeddingBatch', { batchIndex: index+1 });
+        console.log('src/services/embedding.service.js generateEmbeddings Before generateEmbeddingBatch', { batchIndex: index + 1 });
         const batchResults = await generateEmbeddingBatch(batch, openai);
-        console.log('src/services/embedding.service.js generateEmbeddings After generateEmbeddingBatch', { batchIndex: index+1, batchResultsCount: batchResults.length });
-        
+        console.log('src/services/embedding.service.js generateEmbeddings After generateEmbeddingBatch', { batchIndex: index + 1, batchResultsCount: batchResults.length });
+
         // Save successful embeddings immediately
         if (batchResults.length > 0) {
           await saveBatchToStorage(batchResults, pineconeIndex);
           successCount += batchResults.length;
         }
-        
+
         errorCount += batch.length - batchResults.length;
         processedCount += batch.length;
-        
+
         // Log progress
         logger.info('Batch processing progress', {
           batch: index + 1,
@@ -187,13 +199,13 @@ async function generateEmbeddings(records) {
           errorCount,
           progress: `${Math.round((processedCount / records.length) * 100)}%`
         });
-        
+
         // Add a small delay between batches to avoid rate limits
         if (index < recordBatches.length - 1) {
           await delay(BATCH_DELAY());
         }
       } catch (err) {
-        console.log('src/services/embedding.service.js generateEmbeddings Error in batch', { batchIndex: index+1, message: err.message, stack: err.stack, axiosData: err?.response?.data });
+        console.log('src/services/embedding.service.js generateEmbeddings Error in batch', { batchIndex: index + 1, message: err.message, stack: err.stack, axiosData: err?.response?.data });
         logger.error(`Error processing batch ${index + 1}:`, err);
         errorCount += batch.length;
         processedCount += batch.length;
@@ -224,6 +236,14 @@ async function generateEmbeddings(records) {
  * Supports both Pinecone and Chroma.
  */
 async function deleteVectors(codes) {
+
+  // Use Chroma vector store if CHROMA_BASE_URL is set
+  const useChroma = Boolean(!!process.env.CHROMA_BASE_URL);//
+
+  console.debug('Chroma vector store configuration:', { useChroma });
+
+
+
   try {
     if (!codes || codes.length === 0) {
       logger.warn('No codes provided for vector deletion');
@@ -268,6 +288,12 @@ async function deleteVectors(codes) {
  * For Chroma, counts via MongoDB documents; for Pinecone, queries vector store.
  */
 async function getVectorCountsByFileName(fileNames, namespace) {
+  // Use Chroma vector store if CHROMA_BASE_URL is set
+  const useChroma = Boolean(!!process.env.CHROMA_BASE_URL);//
+
+  console.debug('Chroma vector store configuration:', { useChroma });
+
+
   if (!fileNames || fileNames.length === 0) {
     return new Map();
   }
@@ -293,6 +319,7 @@ async function getVectorCountsByFileName(fileNames, namespace) {
         counts.set(fileName, 0);
       }
     }
+    console.debug('Chroma vector counts:', { counts })
     return counts;
   }
   // Pinecone fallback
@@ -314,6 +341,7 @@ async function getVectorCountsByFileName(fileNames, namespace) {
         counts.set(fileName, 0);
       }
     }
+    console.debug('Pinecone vector counts:', { counts })
     return counts;
   } catch (error) {
     logger.error('Error getting vector counts (Pinecone):', error);

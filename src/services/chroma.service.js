@@ -44,6 +44,7 @@ export async function syncFileToChroma(fileName, namespace = 'default') {
     const documents = [];
     await Promise.all(batch.map(async rec => {
       try {
+        // Generate embedding from code + metadata_small
         const vecRes = await openai.embeddings.create({
           input: `${rec.code}\n${rec.metadata_small}`,
           model: process.env.EMBEDDING_OPENAI_MODEL
@@ -51,7 +52,18 @@ export async function syncFileToChroma(fileName, namespace = 'default') {
         const vector = vecRes.data[0].embedding;
         ids.push(rec.code);
         embeddings.push(vector);
-        metadatas.push({ code: rec.code, metadata_small: rec.metadata_small });
+        // Parse metadata_small JSON into object for Chroma
+        let metaObj;
+        try {
+          metaObj = JSON.parse(rec.metadata_small);
+        } catch (e) {
+          metaObj = { metadata_small: rec.metadata_small };
+        }
+        // Include identifying fields
+        metaObj.code = rec.code;
+        metaObj.fileName = rec.fileName;
+        metaObj.namespace = rec.namespace;
+        metadatas.push(metaObj);
         documents.push(rec.code);
       } catch (err) {
         logger.error('Error generating embedding during Chroma sync', { code: rec.code, message: err.message });
