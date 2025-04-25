@@ -25,10 +25,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function embedDocument(code, metadata_small) {
   try {
-
+/* 
     console.debug('Embedding document:', {
       model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
-    });
+    }); */
 
     const openai = getOpenAIEmbedding();
     const response = await openai.embeddings.create({
