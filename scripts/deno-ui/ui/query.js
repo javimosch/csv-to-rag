@@ -24,6 +24,10 @@ export const template = `
                           class="w-full p-2 border border-gray-300 rounded"
                           rows="3"></textarea>
             </div>
+            <div class="flex items-center mb-2">
+                <input type="checkbox" id="onlyContextCheckbox" class="mr-2">
+                <label for="onlyContextCheckbox" class="text-sm text-gray-700">Only return context (no LLM completion)</label>
+            </div>
             <div class="flex space-x-2">
                 <button onclick="submitQuery()" 
                         class="flex-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-500">

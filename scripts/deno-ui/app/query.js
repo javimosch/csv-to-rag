@@ -107,13 +107,14 @@ async function submitQuery() {
         error.textContent = '';
         queryResult.innerHTML = 'Processing query...';
         
+        const onlyContext = document.getElementById('onlyContextCheckbox').checked;
         // scripts/deno-ui/app/query.js submitQuery Sending query to backend
-        console.log('query.js submitQuery Sending query to backend', {data: {query, namespace}});
+        console.log('query.js submitQuery Sending query to backend', {data: {query, namespace, onlyContext}});
         
         const response = await fetch(`${baseUrl}/api/query`, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ query, namespace })
+            body: JSON.stringify({ query, namespace, onlyContext })
         });
         
         if (response.ok) {
@@ -164,18 +165,19 @@ function computeCurl() {
         return;
     }
     
+    const onlyContext = document.getElementById('onlyContextCheckbox').checked;
     // Use string concatenation instead of template literals to avoid escaping issues
     const curlCommand = 'curl -X POST "' + baseUrl + '/api/query" \\\n' +
         '     -H "Content-Type: application/json" \\\n' +
         '     -H "Authorization: Bearer ' + apiKey + '" \\\n' +
-        '     -d \'{"query": "' + query.replace(/'/g, "\\'") + '", "namespace": "' + namespace + '"}\'';
+        '     -d \'{"query": "' + query.replace(/'/g, "\\'") + '", "namespace": "' + namespace + '", "onlyContext": ' + onlyContext + '}\'';
     
     const curlDiv = document.getElementById('curlCommand');
     curlDiv.classList.remove('hidden');
     curlDiv.querySelector('pre').textContent = curlCommand;
     
     // scripts/deno-ui/app/query.js computeCurl Curl command generated
-    console.log('query.js computeCurl Curl command generated', {data: {namespace}});
+    console.log('query.js computeCurl Curl command generated', {data: {namespace, onlyContext}});
 }
 
 function displayQueryResult(result) {
