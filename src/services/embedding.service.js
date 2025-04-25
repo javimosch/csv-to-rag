@@ -90,31 +90,41 @@ async function generateEmbeddingBatch(records, openai) {
 }
 
 async function saveBatchToStorage(embeddings, pineconeIndex) {
+  // src/services/embedding.service.js saveBatchToStorage Called
+  console.log('src/services/embedding.service.js saveBatchToStorage Called', { embeddingsCount: embeddings.length });
   try {
     // Save records to MongoDB
     const documents = embeddings.map(item => item.record);
+    console.log('src/services/embedding.service.js saveBatchToStorage Before insertMany', { documentsCount: documents.length });
     await Document.insertMany(documents);
+    console.log('src/services/embedding.service.js saveBatchToStorage After insertMany', { documentsCount: documents.length });
     logger.info('Saved batch to MongoDB', { count: documents.length });
 
     // Save embeddings to Pinecone
     const vectors = embeddings.map(item => item.embedding);
     if (vectors.length > 0) {
+      console.log('src/services/embedding.service.js saveBatchToStorage Before pineconeIndex.upsert', { vectorsCount: vectors.length });
       await pineconeIndex.upsert({
         vectors: vectors
       });
+      console.log('src/services/embedding.service.js saveBatchToStorage After pineconeIndex.upsert', { vectorsCount: vectors.length });
       logger.info('Saved batch to Pinecone', { count: vectors.length });
     }
-  } catch (error) {
-    logger.error('Error saving batch:', error);
-    throw error;
+  } catch (err) {
+    console.log('src/services/embedding.service.js saveBatchToStorage Error', { message: err.message, stack: err.stack, axiosData: err?.response?.data });
+    logger.error('Error saving batch:', err);
+    throw err;
   }
 }
 
 async function generateEmbeddings(records) {
+  // src/services/embedding.service.js generateEmbeddings Starting embedding generation
+  console.log('src/services/embedding.service.js generateEmbeddings Starting embedding generation', { totalRecords: records.length });
   try {
     const pineconeIndex = await initPinecone();
     const openai = getOpenAIEmbedding();
-    
+    // src/services/embedding.service.js generateEmbeddings Pinecone and OpenAI clients initialized
+    console.log('src/services/embedding.service.js generateEmbeddings Pinecone and OpenAI clients initialized', {});
     // Split records into smaller batches for embedding generation
     const recordBatches = chunkArray(records, EMBEDDING_BATCH_SIZE());
     let processedCount = 0;
@@ -130,10 +140,14 @@ async function generateEmbeddings(records) {
     // Process each batch and save immediately
     for (const [index, batch] of recordBatches.entries()) {
       try {
+        // src/services/embedding.service.js generateEmbeddings Processing batch
+        console.log('src/services/embedding.service.js generateEmbeddings Processing batch', { batchIndex: index+1, batchSize: batch.length });
         logger.info(`Processing batch ${index + 1}/${recordBatches.length}`);
         
         // Generate embeddings for the batch
+        console.log('src/services/embedding.service.js generateEmbeddings Before generateEmbeddingBatch', { batchIndex: index+1 });
         const batchResults = await generateEmbeddingBatch(batch, openai);
+        console.log('src/services/embedding.service.js generateEmbeddings After generateEmbeddingBatch', { batchIndex: index+1, batchResultsCount: batchResults.length });
         
         // Save successful embeddings immediately
         if (batchResults.length > 0) {
@@ -158,8 +172,9 @@ async function generateEmbeddings(records) {
         if (index < recordBatches.length - 1) {
           await delay(BATCH_DELAY());
         }
-      } catch (error) {
-        logger.error(`Error processing batch ${index + 1}:`, error);
+      } catch (err) {
+        console.log('src/services/embedding.service.js generateEmbeddings Error in batch', { batchIndex: index+1, message: err.message, stack: err.stack, axiosData: err?.response?.data });
+        logger.error(`Error processing batch ${index + 1}:`, err);
         errorCount += batch.length;
         processedCount += batch.length;
         // Continue with next batch even if this one failed
@@ -177,9 +192,10 @@ async function generateEmbeddings(records) {
       successful: successCount,
       failed: errorCount
     };
-  } catch (error) {
-    logger.error('Error in generateEmbeddings:', error);
-    throw error;
+  } catch (err) {
+    console.log('src/services/embedding.service.js generateEmbeddings Fatal error', { message: err.message, stack: err.stack, axiosData: err?.response?.data });
+    logger.error('Error in generateEmbeddings:', err);
+    throw err;
   }
 }
 
