@@ -61,36 +61,35 @@ async function listFiles() {
             fileList.innerHTML = data.files.length > 0 
                 ? data.files.map(file => `
                 <div class="border-b border-gray-300 py-2">
-        <div class="flex justify-between items-start">
-            <div>
-                <strong>${file.fileName}</strong>
-                <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">${file.namespace}</span>
-                                <div class="flex items-center gap-2">
-                                    <span>MongoDB: ${file.rowCount} rows</span>
-                                    <span>|</span>
-                                    <span>Pinecone: ${file.vectorCount} vectors</span>
-                                    <span class="ml-2 px-2 py-0.5 rounded text-sm ${file.isInSync 
-                                        ? 'bg-green-100 text-green-800' 
-                                        : 'bg-red-100 text-red-800'}"
-                                    >
-                                        ${file.isInSync ? 'In Sync' : 'Out of Sync'}
-                                    </span>
-                                </div>
-                                <div>Last Updated: ${new Date(file.lastUpdated).toLocaleString()}</div>
-                                <div>Sample Code: ${file.sampleMetadata.code}</div>
-                                <div>Sample Metadata: ${file.sampleMetadata.metadata_small}</div>
-                            </div>
-                            <div class="flex flex-col gap-2">
-                               
-                                <button 
-                                    onclick="deleteFile('${file.fileName}')"
-                                    class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
+                    <div class="flex flex-col md:flex-row justify-between items-start">
+                        <div class="w-full md:w-3/4 break-words">
+                            <strong>${file.fileName}</strong>
+                            <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">${file.namespace}</span>
+                            <div class="flex flex-wrap items-center gap-2 mt-1">
+                                <span>MongoDB: ${file.rowCount} rows</span>
+                                <span class="hidden md:inline">|</span>
+                                <span>Pinecone: ${file.vectorCount} vectors</span>
+                                <span class="px-2 py-0.5 rounded text-sm ${file.isInSync 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-red-100 text-red-800'}"
                                 >
-                                    Delete
-                                </button>
+                                    ${file.isInSync ? 'In Sync' : 'Out of Sync'}
+                                </span>
                             </div>
+                            <div class="mt-1">Last Updated: ${new Date(file.lastUpdated).toLocaleString()}</div>
+                            <div class="mt-1 overflow-hidden text-ellipsis">Sample Code: ${file.sampleMetadata.code}</div>
+                            <div class="mt-1 overflow-hidden text-ellipsis">Sample Metadata: ${file.sampleMetadata.metadata_small}</div>
                         </div>
-                    </div>`).join('')
+                        <div class="flex flex-col gap-2 mt-2 md:mt-0">
+                            <button 
+                                onclick="deleteFile('${file.fileName}')"
+                                class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>`).join('')
                 : '<div>No files found</div>';
         } else {
             fileList.innerHTML = '<div>Invalid response format</div>';

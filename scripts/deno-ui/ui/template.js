@@ -8,7 +8,7 @@ export const template = `<!DOCTYPE html>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto p-8 main-content">
-        <h1 class="text-3xl text-blue-600 mb-6">CSV to RAG UI</h1>
+        <h1 class="text-5xl text-blue-600 mb-8 text-center animate-pulse">CSV to RAG UI</h1>
         
         <!-- Tab Navigation -->
         <div class="flex border-b border-gray-200 mb-6">
