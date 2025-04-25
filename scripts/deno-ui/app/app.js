@@ -17,6 +17,16 @@ window.addEventListener('load', () => {
     if (logsContent) {
         logsContent.addEventListener('scroll', handleLogsScroll);
     }
+    
+    // Add keyboard shortcut for toggling logs section (ALT+L)
+    document.addEventListener('keydown', (event) => {
+        // Check if ALT+L was pressed
+        if (event.altKey && event.key.toLowerCase() === 'l') {
+            console.log('app.js keydown ALT+L detected', {data: {logsVisible}});
+            event.preventDefault(); // Prevent default browser behavior
+            toggleSection('logs');
+        }
+    });
 });
 
 // Clean up on page unload
