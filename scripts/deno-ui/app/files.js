@@ -1,4 +1,6 @@
 // All files under /deno-ui/app are compiled and combined into main.js (All functions are available globally)
+// Detect if using Chroma mode
+const useChroma = window.USE_CHROMA === true;
 
 // Toast utility
 function showToast(message, type = 'info', duration = 3000) {
@@ -58,7 +60,7 @@ async function listFiles() {
         const data = await response.json();
         
         if (data && data.totalFiles !== undefined && Array.isArray(data.files)) {
-            fileList.innerHTML = data.files.length > 0 
+        fileList.innerHTML = data.files.length > 0 
                 ? data.files.map(file => `
                 <div class="card bg-base-100 shadow mb-4 p-4 w-full">
                     <div class="flex flex-col md:flex-row justify-between items-start gap-4">
@@ -68,7 +70,13 @@ async function listFiles() {
                             <div class="flex flex-wrap items-center gap-2 mt-1">
                                 <span>MongoDB: ${file.rowCount} rows</span>
                                 <span class="hidden md:inline">|</span>
-                                <span>Pinecone: ${file.vectorCount} vectors</span>
+                                <span>${useChroma ? 'Chroma' : 'Pinecone'}: ${file.vectorCount} vectors</span>
+                                ${useChroma ? `
+                                <button 
+                                    onclick="syncChroma('${file.fileName}', '${file.namespace}')"
+                                    class="text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded text-sm"
+                                >Sync Chroma</button>
+                                ` : ''}
                                 <span class="px-2 py-0.5 rounded text-sm ${file.isInSync 
                                     ? 'bg-green-100 text-green-800' 
                                     : 'bg-red-100 text-red-800'}"
@@ -132,6 +140,38 @@ async function deleteFile(fileName, namespace) {
         }
     } catch (err) {
         error.textContent = `Error deleting file: ${err.message}`;
+    }
+}
+ 
+/**
+ * Sync MongoDB documents into Chroma for a given file and namespace
+ */
+async function syncChroma(fileName, namespace) {
+    if (!confirm(`Sync documents for ${fileName} into Chroma?`)) return;
+    const baseUrl = document.getElementById('baseUrl').value;
+    const error = document.getElementById('error');
+    try {
+        error.textContent = '';
+        const response = await fetch(
+            `${baseUrl}/api/chroma/sync`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ fileName, namespace })
+        });
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        if (result.success) {
+            showToast(`Chroma synced: ${result.synced}/${result.total}`, 'info');
+            await listFiles();
+        } else {
+            throw new Error(result.error || 'Sync failed');
+        }
+    } catch (err) {
+        error.textContent = `Error syncing Chroma: ${err.message}`;
+        showToast(`Error: ${err.message}`, 'warn');
     }
 }
 

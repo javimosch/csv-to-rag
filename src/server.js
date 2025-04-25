@@ -13,6 +13,7 @@ logger.info('Dotenv loaded'); //It doesnt print
 import { csvRoutes } from './routes/csv.routes.js';
 import { queryRoutes } from './routes/query.routes.js';
 import { logRoutes } from './routes/log.routes.js';
+import { chromaRoutes } from './routes/chroma.routes.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { setupMongoDB } from './config/mongodb.js';
 import { initPinecone } from './config/pinecone.js';
@@ -82,6 +83,8 @@ app.use('/api', authenticateApiKey);
 app.use('/api/csv', csvRoutes);
 app.use('/api', queryRoutes); // Now includes /completion
 app.use('/api/logs', logRoutes);
+// Chroma sync endpoint
+app.use('/api', chromaRoutes);
 
 app.get('/', (req, res) => {
   res.send(`CSV to RAG API running on port ${PORT}`);

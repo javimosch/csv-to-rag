@@ -175,7 +175,14 @@ async function handler(req) {
 
 
   if (url.pathname === "/") {
-    return new Response(template(), {
+    // Inject USE_CHROMA flag into client-side
+    const useChroma = Boolean(env.CHROMA_BASE_URL);
+    let html = template();
+    html = html.replace(
+      '<script src="/static/main.js"></script>',
+      `<script>window.USE_CHROMA = ${useChroma};</script><script src="/static/main.js"></script>`
+    );
+    return new Response(html, {
       headers: { "Content-Type": "text/html" },
     });
   }
