@@ -6,9 +6,9 @@ import { parse } from 'csv-parse/sync';
 export const csvSchema = Joi.object({
   code: Joi.string().required(),
   metadata_small: Joi.string().required(),
-  metadata_big_1: Joi.string().required(),
-  metadata_big_2: Joi.string().required(),
-  metadata_big_3: Joi.string().required(),
+  metadata_big_1: Joi.string().allow('').optional(),
+  metadata_big_2: Joi.string().allow('').optional(),
+  metadata_big_3: Joi.string().allow('').optional(),
 });
 
 // Validation middleware for CSV data
