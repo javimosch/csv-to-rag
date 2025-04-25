@@ -452,8 +452,7 @@ async function processBatch(pineconeIndex, batch, isAuto = false, namespace = 'd
 
 async function getMongoHealth(namespace = 'default') {
     try {
-        // Ensure MongoDB connection
-        await connectToMongoDB();
+        // Assumes MongoDB connection is already established
 
         // Get document counts by fileName
         const documentCounts = await Document.aggregate([
@@ -478,10 +477,9 @@ async function getMongoHealth(namespace = 'default') {
     }
 }
 
-async function getPineconeHealth() {
+async function getPineconeHealth(pineconeIndex) {
     try {
-        const pineconeIndex = await initPinecone();
-        logger.info('Connected to Pinecone');
+        // Using existing Pinecone client
 
         // Get overall stats for all namespaces
         const stats = await pineconeIndex.describeIndexStats();
@@ -543,7 +541,7 @@ async function getPineconeHealth() {
 } 
 
 
-async function logExtraMongoDocuments(fileName, namespace = 'default') {
+async function logExtraMongoDocuments(pineconeIndex, fileName, namespace = 'default') {
     try {
         // Get all documents for this file
         const mongoDocs = await Document.find({ fileName, namespace }).lean();
@@ -552,8 +550,7 @@ async function logExtraMongoDocuments(fileName, namespace = 'default') {
         const dim = await getVectorDimension();
         const zeroVector = new Array(dim).fill(0);
         
-        // Initialize Pinecone
-        const pineconeIndex = await initPinecone();
+        // Using existing Pinecone client
         
         // Create a log file for extra documents
         const logStream = fs.createWriteStream('repair.log', { flags: 'a' });
@@ -590,17 +587,16 @@ async function logExtraMongoDocuments(fileName, namespace = 'default') {
     }
 }
 
-async function runHealthCheck(namespace = 'default') {
+async function runHealthCheck(pineconeIndex, namespace = 'default') {
     try {
         logger.info('Running health check...');
 
-        // Ensure MongoDB connection
-        await connectToMongoDB();
+        // Using existing MongoDB connection
 
         // Get health information from both systems
         const [mongoHealth, pineconeHealth] = await Promise.all([
             getMongoHealth(namespace),
-            getPineconeHealth(namespace)
+            getPineconeHealth(pineconeIndex)
         ]);
 
         console.log('\n=== Health Check Results ===\n');
@@ -639,36 +635,31 @@ async function runHealthCheck(namespace = 'default') {
         // Check for discrepancies
         console.log('\n=== Discrepancies ===\n');
         let hasDiscrepancies = false;
-
-        // Create a map for easier comparison
-        const mongoCountMap = mongoHealth;
-
-        // Store files with discrepancies
         const discrepancyFiles = [];
 
-        // Iterate through each namespace in pineconeHealth
-        let totalVectors = 0
-        for (const [namespace, healthData] of Object.entries(pineconeHealth)) {
-            const vectorsByFile = healthData.vectorsByFile || {};
-
-            Object.keys(vectorsByFile).forEach(fileName => {
-                const mongoCount = mongoCountMap.get(fileName) || 0;
-                const pineconeCount = vectorsByFile[fileName] || 0;
-                totalVectors+=pineconeCount
-                if (mongoCount !== pineconeCount) {
-                    hasDiscrepancies = true;
-                    console.log(`\n  ${fileName}:`);
-                    console.log(`    MongoDB:       ${mongoCount} documents`);
-                    console.log(`    Pinecone:      ${pineconeCount} vectors`);
-                    console.log(`    Difference:     ${mongoCount - pineconeCount} missing in Pinecone`);
-                    
-                    // Add to list if MongoDB has more documents
-                    if (mongoCount > pineconeCount) {
-                        discrepancyFiles.push(fileName);
-                    }
-                }
+        // Aggregate Pinecone vector counts by file across all namespaces
+        const pineconeCountMap = new Map();
+        Object.values(pineconeHealth).forEach(healthData => {
+            Object.entries(healthData.vectorsByFile || {}).forEach(([fileName, count]) => {
+                pineconeCountMap.set(fileName, (pineconeCountMap.get(fileName) || 0) + count);
             });
-        }
+        });
+
+        const mongoCountMap = mongoHealth;
+        // Compare counts per file
+        mongoCountMap.forEach((mongoCount, fileName) => {
+            const pineconeCount = pineconeCountMap.get(fileName) || 0;
+            if (mongoCount !== pineconeCount) {
+                hasDiscrepancies = true;
+                console.log(`\n  ${fileName}:`);
+                console.log(`    MongoDB:       ${mongoCount} documents`);
+                console.log(`    Pinecone:      ${pineconeCount} vectors`);
+                console.log(`    Difference:     ${mongoCount - pineconeCount} missing in Pinecone`);
+                if (mongoCount > pineconeCount) {
+                    discrepancyFiles.push(fileName);
+                }
+            }
+        });
 
         if (!hasDiscrepancies) {
             console.log('No discrepancies found. All counts match!');
@@ -677,7 +668,7 @@ async function runHealthCheck(namespace = 'default') {
         console.log('\n=== Overall Health Status ===\n');
 
         const totalMongo = Array.from(mongoCountMap.values()).reduce((a, b) => a + b, 0);
-        const totalPinecone = totalVectors
+        const totalPinecone = Array.from(pineconeCountMap.values()).reduce((a, b) => a + b, 0);
 
         if (totalMongo === totalPinecone && !hasDiscrepancies) {
             console.log('✅ System is healthy! All document counts match.');
@@ -698,16 +689,13 @@ async function runHealthCheck(namespace = 'default') {
         if (discrepancyFiles.length > 0) {
             logger.info('Logging extra MongoDB documents...');
             for (const fileName of discrepancyFiles) {
-                await logExtraMongoDocuments(fileName, namespace);
+                await logExtraMongoDocuments(pineconeIndex, fileName, namespace);
             }
         }
 
     } catch (error) {
         logger.error('Error running health check:', error);
         throw error;
-    } finally {
-        // Close MongoDB connection at the very end
-        await closeServices();
     }
 }
 
@@ -936,7 +924,7 @@ async function main() {
         } else if (removeOrphans) {
             await removeOrphanVectors(pineconeIndex, namespace);
         } else {
-            await runHealthCheck(namespace);
+            await runHealthCheck(pineconeIndex, namespace);
         }
     } catch (error) {
         logger.error('Error in main:', {
