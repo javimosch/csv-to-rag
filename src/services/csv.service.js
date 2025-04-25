@@ -126,9 +126,12 @@ export class CSVService {
     logger.info('Starting async CSV processing', { jobId, fileName, namespace, fileSize: fileBuffer.length });
 
     // Start processing in the background
-    this.processInBackground(fileBuffer, fileName, namespace, jobId).catch(error => {
-      logger.error('Background processing failed', { jobId, fileName, namespace, error });
-    });
+    logger.info('Enqueuing background processing', { jobId, fileName, namespace });
+    this.processInBackground(fileBuffer, fileName, namespace, jobId)
+      .then(() => logger.info('Background processing promise resolved', { jobId }))
+      .catch(error => {
+        logger.error('Background processing failed', { jobId, fileName, namespace, error });
+      });
 
     return {
       jobId,
@@ -175,9 +178,12 @@ export class CSVService {
       logger.info('Background processing started', { jobId, fileName, namespace });
 
       // Clean up existing data first
+      logger.debug('About to cleanup existing data', { jobId, fileName, namespace });
       await this.cleanupExistingData(fileName, namespace);
+      logger.info('cleanupExistingData completed', { jobId, fileName, namespace });
 
       // Step 1: Parse CSV
+      logger.debug('About to parse CSV file', { jobId, fileName, namespace });
       const records = await this.processCSV(fileBuffer, fileName, namespace);
       if (!records || records.length === 0) {
         throw new Error('No valid records found in CSV');
@@ -190,12 +196,16 @@ export class CSVService {
         recordCount: records.length 
       });
 
-      // Step 2: Generate embeddings first (to fail fast if OpenAI has issues)
-      logger.info('Generating embeddings...', { jobId, fileName, namespace });
-      const embeddings = await generateEmbeddings(records, namespace);
-      if (!embeddings || embeddings.length === 0) {
-        throw new Error('Failed to generate embeddings');
+      // Step 2: Generate embeddings first
+      logger.info('Generating embeddings...', { jobId, fileName, namespace, recordCount: records.length });
+      const embeddingResult = await generateEmbeddings(records, namespace);
+      logger.info('Embedding generation result', { jobId, ...embeddingResult });
+      // embeddingResult should include successful & failed counts
+      if (!embeddingResult || embeddingResult.successful === 0) {
+        throw new Error('No embeddings were successfully generated');
       }
+      // For downstream Pinecone upload, regenerate detailed embeddings if needed
+      const embeddings = Array.isArray(embeddingResult.embeddings) ? embeddingResult.embeddings : records;
 
       // Step 3: Save to MongoDB
       logger.info('Saving to MongoDB...', { jobId, fileName, namespace });
@@ -208,17 +218,18 @@ export class CSVService {
       });
 
       // Step 4: Save to Pinecone
-      logger.info('Saving to Pinecone...', { jobId, fileName, namespace });
-      await this.saveToPinecone(embeddings, fileName, namespace);
+      logger.info('Saving to Pinecone metadata...', { jobId, fileName, namespace });
+      const savedVectors = await this.saveToPinecone(embeddings, fileName, namespace);
+      logger.info('Pinecone save completed', { jobId, fileName, namespace, vectorCount: Array.isArray(savedVectors) ? savedVectors.length : null });
       
       const duration = Date.now() - startTime;
-      
       logger.info('Background processing completed successfully', {
         jobId,
         fileName,
         namespace,
         duration: `${duration}ms`,
-        recordCount: records.length
+        recordsProcessed: records.length,
+        vectorsSaved: Array.isArray(savedVectors) ? savedVectors.length : undefined
       });
 
     } catch (error) {
