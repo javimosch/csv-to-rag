@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    image: javimosch/csv-to-rag-backend:1.2
+    working_dir: /app
+    expose:
+      - 3000
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+    restart: unless-stopped
+
+  deno-ui:
+    image: denoland/deno:alpine
+    working_dir: /app
+    expose:
+      - 3001
+    environment:
+      - PORT=3001
+      - INTERNAL_BACKEND=0
+    volumes:
+      - ./:/app
+    command: ["run", "--allow-net", "--allow-env", "--allow-read", "--allow-run", "scripts/deno-ui.js"]
+    restart: unless-stopped
+    depends_on:
+      - backend

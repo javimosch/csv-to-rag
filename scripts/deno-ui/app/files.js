@@ -60,8 +60,8 @@ async function listFiles() {
         if (data && data.totalFiles !== undefined && Array.isArray(data.files)) {
             fileList.innerHTML = data.files.length > 0 
                 ? data.files.map(file => `
-                <div class="border-b border-gray-300 py-2">
-                    <div class="flex flex-col md:flex-row justify-between items-start">
+                <div class="card bg-base-100 shadow mb-4 p-4 w-full">
+                    <div class="flex flex-col md:flex-row justify-between items-start gap-4">
                         <div class="w-full md:w-3/4 break-words">
                             <strong>${file.fileName}</strong>
                             <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">${file.namespace}</span>
@@ -83,16 +83,16 @@ async function listFiles() {
                         <div class="flex flex-col gap-2 mt-2 md:mt-0">
                             <button 
                                 onclick="deleteFile('${file.fileName}')"
-                                class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
+                                class="text-white bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
                             >
                                 Delete
                             </button>
                         </div>
                     </div>
                 </div>`).join('')
-                : '<div>No files found</div>';
+                : '<div class="alert alert-info shadow-lg"><div><span>No files found</span></div></div>';
         } else {
-            fileList.innerHTML = '<div>Invalid response format</div>';
+            fileList.innerHTML = '<div class="alert alert-error shadow-lg"><div><span>Invalid response format</span></div></div>';
         }
     } catch (err) {
         error.textContent = `Error: ${err.message}`;

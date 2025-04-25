@@ -5,36 +5,43 @@ function switchTab(tabName) {
     // scripts/deno-ui/app/tabs.js switchTab switching to tab
     console.log('tabs.js switchTab switching to tab', {data: {tabName}});
     
-    // Hide all tab contents
-    const tabContents = document.querySelectorAll('.tab-content');
-    tabContents.forEach(content => {
-        content.classList.add('hidden');
-    });
-    
-    // Remove active class from all tab buttons
-    const tabButtons = document.querySelectorAll('.tab-button');
-    tabButtons.forEach(button => {
-        button.classList.remove('active-tab');
-    });
-    
-    // Show the selected tab content
-    const selectedTab = document.getElementById(`${tabName}-tab`);
-    if (selectedTab) {
-        selectedTab.classList.remove('hidden');
-    }
-    
-    // Add active class to the clicked tab button
-    const selectedButton = document.getElementById(`tab-${tabName}`);
-    if (selectedButton) {
-        selectedButton.classList.add('active-tab');
-    }
-    
-    // Special handling for logs section if needed
-    if (tabName === 'logs') {
-        startLogFetching();
-    } else {
-        // Consider if you want to stop log fetching when not on logs tab
-        // stopLogFetching();
+    // scripts/deno-ui/app/tabs.js switchTab switching tabs
+    console.log('tabs.js switchTab switching tabs', {data: {tabName}});
+    try {
+        // Hide all tab contents
+        const tabContents = document.querySelectorAll('.tab-content');
+        tabContents.forEach(content => {
+            content.classList.add('hidden');
+        });
+
+        // Remove DaisyUI active class from all tab buttons
+        const tabButtons = document.querySelectorAll('.tab');
+        tabButtons.forEach(button => {
+            button.classList.remove('tab-active');
+        });
+
+        // Show the selected tab content
+        const selectedTab = document.getElementById(`${tabName}-tab`);
+        if (selectedTab) {
+            selectedTab.classList.remove('hidden');
+        }
+
+        // Add DaisyUI active class to the clicked tab button
+        const selectedButton = document.getElementById(`tab-${tabName}`);
+        if (selectedButton) {
+            selectedButton.classList.add('tab-active');
+        }
+
+        // Special handling for logs section if needed
+        if (tabName === 'logs') {
+            if (typeof startLogFetching === 'function') startLogFetching();
+        } else {
+            // Optionally stop log fetching
+            // if (typeof stopLogFetching === 'function') stopLogFetching();
+        }
+    } catch (err) {
+        // scripts/deno-ui/app/tabs.js switchTab try/catch
+        console.log('tabs.js switchTab try/catch', {message: err?.message, stack: err?.stack});
     }
 }
 

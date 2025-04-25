@@ -1,29 +1,9 @@
 export const styles = `
-    /* Tab Styles */
-    .tab-button {
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        border-bottom: 2px solid transparent;
-        transition: all 0.3s ease;
-        color: #4B5563;
-        background-color: transparent;
-        cursor: pointer;
-    }
-    
-    .tab-button:hover {
-        color: #2563EB;
-    }
-    
-    .active-tab {
-        color: #2563EB;
-        border-bottom: 2px solid #2563EB;
-    }
-    
+    /* DaisyUI tabs: .tab and .tab-active are used for tab navigation */
     .tab-content {
         display: block;
         transition: opacity 0.3s ease;
     }
-    
     .tab-content.hidden {
         display: none;
         opacity: 0;
