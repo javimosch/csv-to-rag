@@ -173,6 +173,7 @@
       "dependencies": [
         "npm:@pinecone-database/pinecone@4",
         "npm:axios@^1.8.4",
+        "npm:chromadb@^2.3.0",
         "npm:commander@13",
         "npm:cors@^2.8.5",
         "npm:csv-parse@^5.5.3",

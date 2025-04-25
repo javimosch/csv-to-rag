@@ -25,3 +25,14 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+  # Chroma vector database service for local development
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma
+    ports:
+      - "8123:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma
+    # Remove custom command flags; use default entrypoint to properly start server
+    # command: ["--allow-reset", "--disable-anonymized-telemetry"]
+    restart: unless-stopped

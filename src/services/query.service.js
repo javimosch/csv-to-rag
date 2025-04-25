@@ -2,12 +2,15 @@ import { initPinecone } from '../config/pinecone.js';
 import { getOpenAI, getOpenAIEmbedding } from '../config/openai.js';
 import { Document } from '../models/document.model.js';
 import { logger, completionLogger } from '../utils/logger.js';
+import { getChromaCollection } from '../config/chroma.js';
+
+// Use Chroma if CHROMA_BASE_URL is set, else use Pinecone
+const useChroma = Boolean(process.env.CHROMA_BASE_URL);
 
 export class QueryService {
   static async performSimilaritySearch(query, limit = 5, namespace = 'default') {
     try {
       logger.info('Starting similarity search for query:', { query, namespace });
-      const pineconeIndex = await initPinecone();
       const openai = getOpenAIEmbedding();
       
       logger.info('Generating query embedding',{
@@ -19,27 +22,43 @@ export class QueryService {
       });
       logger.info('Query embedding generated successfully');
 
-      logger.info('Performing Pinecone vector search');
-      const searchResults = await pineconeIndex.namespace(namespace).query({
-        vector: queryEmbedding.data[0].embedding,
-        topK: limit,
-        includeMetadata: true
-      });
-      logger.info('Pinecone search completed', { 
-        matchCount: searchResults.matches?.length || 0,
-        namespace 
-      });
-
-      logger.info('Fetching documents from MongoDB');
-      const documents = await Document.find({
-        code: { $in: searchResults.matches.map(match => match.metadata.code) },
-        namespace
-      });
-      logger.info('MongoDB documents retrieved', { 
-        documentCount: documents.length,
-        namespace 
-      });
-
+      let searchResults, documents;
+      if (useChroma) {
+        logger.info('Performing Chroma vector search', { namespace });
+        const collection = await getChromaCollection(namespace);
+        // Query collections for similar embeddings
+        const results = await collection.query({
+          queryEmbeddings: [queryEmbedding.data[0].embedding],
+          nResults: limit,
+          include: ['metadatas', 'documents', 'distances']
+        });
+        logger.info('Chroma search completed', { 
+          resultCount: results.ids?.[0]?.length || 0,
+          namespace
+        });
+        // Retrieve documents from MongoDB by code and namespace
+        const ids = results.ids[0] || [];
+        documents = await Document.find({ code: { $in: ids }, namespace });
+        logger.info('MongoDB documents retrieved', { documentCount: documents.length, namespace });
+        searchResults = results;
+      } else {
+        const pineconeIndex = await initPinecone();
+        logger.info('Performing Pinecone vector search');
+        searchResults = await pineconeIndex.namespace(namespace).query({
+          vector: queryEmbedding.data[0].embedding,
+          topK: limit,
+          includeMetadata: true
+        });
+        logger.info('Pinecone search completed', { 
+          matchCount: searchResults.matches?.length || 0,
+          namespace 
+        });
+        documents = await Document.find({
+          code: { $in: searchResults.matches.map(m => m.metadata.code) },
+          namespace
+        });
+        logger.info('MongoDB documents retrieved', { documentCount: documents.length, namespace });
+      }
       return { searchResults, documents };
     } catch (error) {
       logger.error('Error in similarity search:', error);

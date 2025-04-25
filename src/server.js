@@ -18,15 +18,20 @@ import { setupMongoDB } from './config/mongodb.js';
 import { initPinecone } from './config/pinecone.js';
 import { initOpenAI, initOpenAIEmbedding } from './config/openai.js';
 
+// Determine vector DB provider: use Chroma if CHROMA_BASE_URL is set, else Pinecone
+const useChroma = Boolean(process.env.CHROMA_BASE_URL);
 // Validate required environment variables
 const requiredEnvVars = [
   'OPENAI_API_KEY',
-  'PINECONE_API_KEY',
-  'PINECONE_INDEX', //ENVIRONMENT is not required
   'MONGODB_URI',
   'PORT',
   'BACKEND_API_KEY'
 ];
+if (useChroma) {
+  requiredEnvVars.push('CHROMA_BASE_URL');
+} else {
+  requiredEnvVars.push('PINECONE_API_KEY', 'PINECONE_INDEX');
+}
 
 function validateEnv() {
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -89,10 +94,17 @@ app.use(errorHandler);
 async function startServer() {
   try {
     await setupMongoDB();
-    await initPinecone();
+    // Initialize vector DB client based on provider
+    if (useChroma) {
+      const { initChromaClient } = await import('./config/chroma.js');
+      await initChromaClient();
+      logger.info('Using Chroma vector store');
+    } else {
+      await initPinecone();
+      logger.info('Using Pinecone vector store');
+    }
     await initOpenAI();
     await initOpenAIEmbedding();
-    
     app.listen(PORT, () => {
       logger.info(`Server running on port http://localhost:${PORT}`);
     });

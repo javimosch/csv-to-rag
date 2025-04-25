@@ -2,6 +2,10 @@ import { getOpenAIEmbedding } from '../config/openai.js';
 import { initPinecone } from '../config/pinecone.js';
 import { logger } from '../utils/logger.js';
 import { Document } from '../models/document.model.js';
+import { getChromaCollection } from '../config/chroma.js';
+
+// Use Chroma vector store if CHROMA_BASE_URL is set
+const useChroma = Boolean(process.env.CHROMA_BASE_URL);
 
 // Get batch configuration from environment variables
 const BATCH_SIZE = ()=>parseInt(process.env.PINECONE_BATCH_SIZE || '100', 10);
@@ -89,8 +93,10 @@ async function generateEmbeddingBatch(records, openai) {
   return results.filter(result => result !== null);
 }
 
+/**
+ * Save a batch of embeddings and records to the vector store and MongoDB.
+ */
 async function saveBatchToStorage(embeddings, pineconeIndex) {
-  // src/services/embedding.service.js saveBatchToStorage Called
   console.log('src/services/embedding.service.js saveBatchToStorage Called', { embeddingsCount: embeddings.length });
   try {
     // Save records to MongoDB
@@ -100,15 +106,26 @@ async function saveBatchToStorage(embeddings, pineconeIndex) {
     console.log('src/services/embedding.service.js saveBatchToStorage After insertMany', { documentsCount: documents.length });
     logger.info('Saved batch to MongoDB', { count: documents.length });
 
-    // Save embeddings to Pinecone
-    const vectors = embeddings.map(item => item.embedding);
-    if (vectors.length > 0) {
-      console.log('src/services/embedding.service.js saveBatchToStorage Before pineconeIndex.upsert', { vectorsCount: vectors.length });
-      await pineconeIndex.upsert({
-        vectors: vectors
-      });
-      console.log('src/services/embedding.service.js saveBatchToStorage After pineconeIndex.upsert', { vectorsCount: vectors.length });
-      logger.info('Saved batch to Pinecone', { count: vectors.length });
+    if (useChroma) {
+      // Save embeddings to Chroma collection per namespace
+      const namespace = embeddings[0].record.namespace || 'default';
+      const collection = await getChromaCollection(namespace);
+      const ids = embeddings.map(item => item.embedding.id);
+      const vectors = embeddings.map(item => item.embedding.values);
+      const metadatas = embeddings.map(item => item.embedding.metadata);
+      const docs = embeddings.map(item => item.record.code);
+      console.log('src/services/embedding.service.js saveBatchToStorage Adding to Chroma', { namespace, vectorsCount: ids.length });
+      await collection.add({ ids, embeddings: vectors, metadatas, documents: docs });
+      logger.info('Saved batch to Chroma', { count: ids.length, namespace });
+    } else {
+      // Save embeddings to Pinecone
+      const vectors = embeddings.map(item => item.embedding);
+      if (vectors.length > 0) {
+        console.log('src/services/embedding.service.js saveBatchToStorage Before pineconeIndex.upsert', { vectorsCount: vectors.length });
+        await pineconeIndex.upsert({ vectors });
+        console.log('src/services/embedding.service.js saveBatchToStorage After pineconeIndex.upsert', { vectorsCount: vectors.length });
+        logger.info('Saved batch to Pinecone', { count: vectors.length });
+      }
     }
   } catch (err) {
     console.log('src/services/embedding.service.js saveBatchToStorage Error', { message: err.message, stack: err.stack, axiosData: err?.response?.data });
@@ -121,10 +138,13 @@ async function generateEmbeddings(records) {
   // src/services/embedding.service.js generateEmbeddings Starting embedding generation
   console.log('src/services/embedding.service.js generateEmbeddings Starting embedding generation', { totalRecords: records.length });
   try {
-    const pineconeIndex = await initPinecone();
+    // Initialize vector store client if using Pinecone
+    let pineconeIndex;
+    if (!useChroma) {
+      pineconeIndex = await initPinecone();
+    }
     const openai = getOpenAIEmbedding();
-    // src/services/embedding.service.js generateEmbeddings Pinecone and OpenAI clients initialized
-    console.log('src/services/embedding.service.js generateEmbeddings Pinecone and OpenAI clients initialized', {});
+    console.log('src/services/embedding.service.js generateEmbeddings OpenAI embedding client initialized', {});
     // Split records into smaller batches for embedding generation
     const recordBatches = chunkArray(records, EMBEDDING_BATCH_SIZE());
     let processedCount = 0;
@@ -199,47 +219,38 @@ async function generateEmbeddings(records) {
   }
 }
 
+/**
+ * Delete vectors by IDs from the vector store.
+ * Supports both Pinecone and Chroma.
+ */
 async function deleteVectors(codes) {
   try {
     if (!codes || codes.length === 0) {
       logger.warn('No codes provided for vector deletion');
       return;
     }
-
-    const pineconeIndex = await initPinecone();
-    
-    // Delete in batches to avoid overwhelming Pinecone
-    const batches = chunkArray(codes, BATCH_SIZE());
-    
-    logger.info('Starting vector deletion', { 
-      totalVectors: codes.length,
-      batchCount: batches.length 
-    });
-
-    for (const batch of batches) {
-      try {
-        await pineconeIndex.deleteMany({
-          ids: batch
-        });
-        
-        logger.info('Deleted vector batch', { 
-          batchSize: batch.length 
-        });
-        
-        // Add delay between batches
-        await delay(BATCH_DELAY());
-      } catch (error) {
-        logger.error('Error deleting vector batch:', { 
-          error: error.message,
-          batch 
-        });
-        throw error;
+    if (useChroma) {
+      // Delete from Chroma default collection or namespace-specific
+      const namespace = 'default';
+      const collection = await getChromaCollection(namespace);
+      await collection.delete({ ids: codes });
+      logger.info('Deleted vectors from Chroma', { count: codes.length, namespace });
+    } else {
+      const pineconeIndex = await initPinecone();
+      const batches = chunkArray(codes, BATCH_SIZE());
+      logger.info('Starting vector deletion (Pinecone)', { totalVectors: codes.length, batchCount: batches.length });
+      for (const batch of batches) {
+        try {
+          await pineconeIndex.deleteMany({ ids: batch });
+          logger.info('Deleted vector batch (Pinecone)', { batchSize: batch.length });
+          await delay(BATCH_DELAY());
+        } catch (error) {
+          logger.error('Error deleting vector batch (Pinecone):', { error: error.message, batch });
+          throw error;
+        }
       }
+      logger.info('Vector deletion completed (Pinecone)', { totalVectorsDeleted: codes.length });
     }
-
-    logger.info('Vector deletion completed', { 
-      totalVectorsDeleted: codes.length 
-    });
   } catch (error) {
     logger.error('Error in deleteVectors:', error);
     throw error;
@@ -252,45 +263,49 @@ async function deleteVectors(codes) {
  * @param {string} [namespace] - Pinecone namespace to query. If omitted, queries default.
  * @returns {Promise<Map<string, number>>} Map of fileName to vector count.
  */
+/**
+ * Get vector counts per fileName, scoped to a namespace.
+ * For Chroma, counts via MongoDB documents; for Pinecone, queries vector store.
+ */
 async function getVectorCountsByFileName(fileNames, namespace) {
-  try {
-    if (!fileNames || fileNames.length === 0) {
-      return new Map();
-    }
-
-    const pineconeIndex = await initPinecone();
+  if (!fileNames || fileNames.length === 0) {
+    return new Map();
+  }
+  if (useChroma) {
     const counts = new Map();
-    const dim = parseInt(process.env.VECTOR_DIM || '1536', 10);
-
     for (const fileName of fileNames) {
       try {
-        const zeroVector = new Array(dim).fill(0);
-        // Query within namespace if provided
-        const queryOptions = {
-          vector: zeroVector,
-          filter: { fileName },
-          topK: 10000,
-          includeMetadata: false
-        };
-        let queryResponse;
-        if (namespace) {
-          queryResponse = await pineconeIndex.namespace(namespace).query(queryOptions);
-        } else {
-          queryResponse = await pineconeIndex.query(queryOptions);
-        }
-
-        counts.set(fileName, queryResponse.matches?.length || 0);
-        // Throttle between queries
-        await new Promise(res => setTimeout(res, 100));
+        const count = await Document.countDocuments({ fileName, namespace });
+        counts.set(fileName, count);
       } catch (error) {
-        logger.error('Error getting vector count for file:', { fileName, namespace, error: error.message });
+        logger.error('Error counting documents for file (Chroma):', { fileName, namespace, error: error.message });
         counts.set(fileName, 0);
       }
     }
-
+    return counts;
+  }
+  // Pinecone fallback
+  try {
+    const pineconeIndex = await initPinecone();
+    const counts = new Map();
+    const dim = parseInt(process.env.VECTOR_DIM || '1536', 10);
+    for (const fileName of fileNames) {
+      try {
+        const zeroVector = new Array(dim).fill(0);
+        const queryOptions = { vector: zeroVector, filter: { fileName }, topK: 10000, includeMetadata: false };
+        const queryResponse = namespace
+          ? await pineconeIndex.namespace(namespace).query(queryOptions)
+          : await pineconeIndex.query(queryOptions);
+        counts.set(fileName, queryResponse.matches?.length || 0);
+        await new Promise(res => setTimeout(res, 100));
+      } catch (error) {
+        logger.error('Error getting vector count for file (Pinecone):', { fileName, namespace, error: error.message });
+        counts.set(fileName, 0);
+      }
+    }
     return counts;
   } catch (error) {
-    logger.error('Error getting vector counts:', error);
+    logger.error('Error getting vector counts (Pinecone):', error);
     throw error;
   }
 }

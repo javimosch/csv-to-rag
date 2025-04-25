@@ -315,9 +315,10 @@ export class CSVService {
   }
 
   static async deletePineconeVectors(codes) {
-    // Implementation of Pinecone vector deletion
-    logger.info('Deleting vectors from Pinecone', { codes });
-    // This should be implemented in the embedding.service.js
+    // Delete vectors from vector store (Pinecone or Chroma)
+    logger.info('Deleting vectors from vector store', { codes });
+    // Delegate to embedding service
+    await deleteVectors(codes);
   }
 
   static async cleanupPinecone(jobId, fileName, namespace) {

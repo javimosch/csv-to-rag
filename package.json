@@ -21,6 +21,7 @@
   "dependencies": {
     "@pinecone-database/pinecone": "^4.0.0",
     "axios": "^1.8.4",
+    "chromadb": "^2.3.0",
     "commander": "^13.0.0",
     "cors": "^2.8.5",
     "csv-parse": "^5.5.3",
