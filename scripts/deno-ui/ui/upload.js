@@ -30,8 +30,10 @@ export const template = `
                 </select>
             </div>
             <div>
-                <label for="namespace">Namespace:</label>
-                <input type="text" id="namespace" name="namespace" placeholder="Enter namespace (default: 'default')" />
+                <label for="namespace" class="block text-sm font-medium text-gray-700 mb-1">Namespace: <span class="text-red-600" title="Required">*</span></label>
+<input type="text" id="namespace" name="namespace" placeholder="Enter namespace (required)" required class="block w-full p-2 border border-red-300 rounded" aria-required="true" />
+<div id="namespaceError" class="text-red-600 text-sm mt-1" style="display:none"></div>
+<small class="text-gray-500">Namespace is required. Choose a unique name for your data grouping.</small>
             </div>
             <button onclick="uploadFile()" 
                     class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-500">

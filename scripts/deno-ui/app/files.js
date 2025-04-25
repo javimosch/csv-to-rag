@@ -104,10 +104,13 @@ async function deleteFile(fileName) {
 }
 
 async function uploadFile() {
+    // scripts/deno-ui/app/files.js uploadFile upload attempt
+    console.log('files.js uploadFile Upload attempt',{data:{}});
     const baseUrl = document.getElementById('baseUrl').value;
     const fileInput = document.getElementById('csvFile');
     const delimiter = document.getElementById('delimiter').value;
-    const namespace = document.getElementById('namespace').value || 'default';
+    const namespace = document.getElementById('namespace').value;
+    const namespaceError = document.getElementById('namespaceError');
     const error = document.getElementById('error');
     const progress = document.getElementById('uploadProgress');
     const progressBar = document.getElementById('uploadProgressBar');
@@ -129,7 +132,7 @@ async function uploadFile() {
         status.textContent = 'Uploading...';
         progressBar.style.width = '0%';
 
-        const response = await fetch(`${baseUrl}/api/csv/upload?namespace=${namespace}`, {
+        const response = await fetch(`${baseUrl}/api/csv/upload?namespace=${encodeURIComponent(namespace)}`, {
             method: 'POST',
             headers: {
                 'Authorization': getAuthHeaders().Authorization
@@ -151,6 +154,8 @@ async function uploadFile() {
         // Clear the file input
         fileInput.value = '';
     } catch (err) {
+        // scripts/deno-ui/app/files.js uploadFile upload try/catch
+        console.log('files.js uploadFile upload try/catch',{message:err.message,stack:err.stack});
         error.textContent = `Error: ${err.message}`;
         status.textContent = 'Upload failed';
         progressBar.style.width = '0%';
