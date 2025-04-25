@@ -121,3 +121,20 @@ The recommended way to upload data is to use namespaces in the Upload route or b
 ```bash
 node ./scripts/db-health.js --repair --file fileName.csv --auto --ns fileName
 ```
+
+---
+
+## Documentation Index
+
+For more details and advanced usage, see the following documentation in the `/docs` folder:
+
+- [Database Health Check and Repair Tool](docs/db-health.md): Health checks, repair, and synchronization between MongoDB and Pinecone.
+- [CSV Upload Process Flow](docs/process-flow.md): Step-by-step flow of CSV upload, validation, and embedding.
+- [Generic CSV Format](docs/generic-csv-format.md): CSV schema and formatting requirements.
+- [List Route](docs/list-route.md): Details on the `/csv/list` API route and its behavior.
+- [Markdown to CSV Conversion](docs/md-to-csv.md): How to convert markdown files to CSV for ingestion.
+- [OpenAI-like API](docs/openai-like-api.md): Using the OpenAI-compatible API endpoints.
+- [Chunking Strategy for Docs](docs/chunking-strategy-for-docs.md): How documents are chunked for embedding and search.
+- [UI Namespace Requirement](docs/ui-namespace-required.md): UI changes and requirements for namespace during file upload.
+
+For troubleshooting, best practices, and more, consult the relevant doc above.
