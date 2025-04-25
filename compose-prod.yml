@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   backend:
-    image: javimosch/csv-to-rag-backend:1.2
+    image: javimosch/csv-to-rag-backend:1.3
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
     working_dir: /app
     expose:
       - 3000
