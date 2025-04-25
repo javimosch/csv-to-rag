@@ -335,7 +335,8 @@ async function uploadFile() {
         
         // Refresh the file list
         await listFiles();
-        
+        // Show toast notification for upload start
+        showToast(`Upload started for ${result.fileName}`, 'info');
         // Clear the file input
         fileInput.value = '';
     } catch (err) {

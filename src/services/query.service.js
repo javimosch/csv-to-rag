@@ -4,21 +4,26 @@ import { Document } from '../models/document.model.js';
 import { logger, completionLogger } from '../utils/logger.js';
 import { getChromaCollection } from '../config/chroma.js';
 
-// Use Chroma if CHROMA_BASE_URL is set, else use Pinecone
-const useChroma = Boolean(process.env.CHROMA_BASE_URL);
 
 export class QueryService {
   static async performSimilaritySearch(query, limit = 5, namespace = 'default') {
+
+
+    // Use Chroma if CHROMA_BASE_URL is set, else use Pinecone
+    const useChroma = Boolean(process.env.CHROMA_BASE_URL);
+
+    console.debug('Chroma vector store configuration:', { useChroma });
+
     try {
       logger.info('Starting similarity search for query:', { query, namespace });
       const openai = getOpenAIEmbedding();
-      
-      logger.info('Generating query embedding',{
-        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+
+      logger.info('Generating query embedding', {
+        model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
       });
       const queryEmbedding = await openai.embeddings.create({
         input: query,
-        model: process.env.EMBEDDING_OPENAI_MODEL||"text-embedding-ada-002"
+        model: process.env.EMBEDDING_OPENAI_MODEL || "text-embedding-ada-002"
       });
       logger.info('Query embedding generated successfully');
 
@@ -32,7 +37,7 @@ export class QueryService {
           nResults: limit,
           include: ['metadatas', 'documents', 'distances']
         });
-        logger.info('Chroma search completed', { 
+        logger.info('Chroma search completed', {
           resultCount: results.ids?.[0]?.length || 0,
           namespace
         });
@@ -49,9 +54,9 @@ export class QueryService {
           topK: limit,
           includeMetadata: true
         });
-        logger.info('Pinecone search completed', { 
+        logger.info('Pinecone search completed', {
           matchCount: searchResults.matches?.length || 0,
-          namespace 
+          namespace
         });
         documents = await Document.find({
           code: { $in: searchResults.matches.map(m => m.metadata.code) },
@@ -68,20 +73,20 @@ export class QueryService {
 
   static async generateResponse(query, context) {
     try {
-      logger.info('Starting response generation', { 
-        contextSize: context?.length || 0 
+      logger.info('Starting response generation', {
+        contextSize: context?.length || 0
       });
-      
+
       const openaiInstance = getOpenAI();
-      const primaryModel = process.env.CSVTORAG_OPENAI_MODEL||process.env.OPENAI_MODEL || 'google/gemini-2.0-flash-exp:free';
-      const fallbackModel = process.env.CSVTORAG_OPENAI_MODEL_FALLBACK||process.env.OPENAI_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
-      
+      const primaryModel = process.env.CSVTORAG_OPENAI_MODEL || process.env.OPENAI_MODEL || 'google/gemini-2.0-flash-exp:free';
+      const fallbackModel = process.env.CSVTORAG_OPENAI_MODEL_FALLBACK || process.env.OPENAI_MODEL_FALLBACK || 'openai/gpt-4o-mini-2024-07-18';
+
       try {
         logger.info('Making completion request to openaiInstance', {
           model: primaryModel,
           timestamp: new Date().toISOString()
         });
-        
+
         const messages = [
           { role: "system", content: process.env.LLM_SYSTEM_PROMPT },
           { role: "user", content: `Context: ${JSON.stringify(context)}\n\nQuery: ${query}` }
@@ -99,7 +104,7 @@ export class QueryService {
           model: primaryModel,
           messages
         });
-        
+
         logger.info('openaiInstance response received', {
           hasChoices: !!completion?.choices,
           choicesLength: completion?.choices?.length
@@ -107,11 +112,11 @@ export class QueryService {
 
         if (!completion?.choices?.[0]?.message?.content) {
           logger.error('Invalid completion response', { completion });
-          throw new Error('Invalid completion response from openaiInstance Code: '+completion?.error?.code);
+          throw new Error('Invalid completion response from openaiInstance Code: ' + completion?.error?.code);
         }
 
         return completion.choices[0].message.content;
-        
+
       } catch (error) {
         logger.error('Initial model error:', {
           error: error?.message,
@@ -121,8 +126,8 @@ export class QueryService {
         });
 
         // Check for various rate limit and resource exhaustion scenarios
-        const isRateLimitError = 
-          error?.status === 429 || 
+        const isRateLimitError =
+          error?.status === 429 ||
           error?.error?.code === 429 ||
           error?.code === 429 ||
           (error?.metadata?.raw && JSON.parse(error.metadata.raw)?.error?.code === 429) ||
@@ -140,7 +145,7 @@ export class QueryService {
             },
             timestamp: new Date().toISOString()
           });
-          
+
           try {
             logger.info('Attempting fallback model request', {
               model: fallbackModel,
@@ -161,7 +166,7 @@ export class QueryService {
               model: fallbackModel,
               messages: fallbackMessages
             });
-            
+
             logger.info('Fallback model response received', {
               hasChoices: !!fallbackCompletion?.choices,
               choicesLength: fallbackCompletion?.choices?.length
@@ -183,7 +188,7 @@ export class QueryService {
             throw error;
           }
         }
-        
+
         // If it's not a rate limit error, rethrow
         throw error;
       }
