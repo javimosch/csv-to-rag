@@ -3,6 +3,7 @@ import multer from 'multer';
 import { CSVService } from '../services/csv.service.js';
 import { validateCsv } from '../middleware/validation.middleware.js';
 import { logger } from '../utils/logger.js';
+import { Document } from '../models/document.model.js';
 
 const router = express.Router();
 const upload = multer({ 
@@ -19,7 +20,13 @@ router.post('/upload', upload.single('csvFile'), validateCsv, async (req, res, n
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const namespace = req.query.namespace || 'default';
+    // Determine namespace: prefer body (from formData), then query, default to 'default'
+    const namespace = req.body.namespace || req.query.namespace || 'default';
+    // Prevent uploading if a CSV with the same filename and namespace already exists
+    const existing = await Document.findOne({ fileName: req.file.originalname, namespace });
+    if (existing) {
+      return res.status(409).json({ error: 'File already uploaded, remove first' });
+    }
     
     // Start async processing
     const result = await CSVService.processFileAsync(

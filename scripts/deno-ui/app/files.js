@@ -269,15 +269,24 @@ async function uploadFile() {
             method: 'POST',
             headers: {
                 'Authorization': getAuthHeaders().Authorization
-                // Don't set Content-Type for FormData, browser will set it with boundary
             },
             body: formData
         });
-
+        
+        // Handle HTTP errors and show toast message
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            let errorMsg = `HTTP error! status: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.error) {
+                    errorMsg = errorData.error;
+                }
+            } catch (e) {
+                // ignore JSON parse errors
+            }
+            showToast(errorMsg, 'warn');
+            throw new Error(errorMsg);
         }
-
         const result = await response.json();
         progressBar.style.width = '100%';
         status.textContent = 'Upload complete!';

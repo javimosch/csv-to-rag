@@ -34,10 +34,9 @@ const documentSchema = new mongoose.Schema({
   }
 });
 
-// Remove single index on code since we'll use a compound index
-documentSchema.index({ code: 1, namespace: 1 }, { unique: true });
-
 // Compound index for efficient querying by fileName
-documentSchema.index({ fileName: 1, code: 1 });
+documentSchema.index({ namespace: 1, code: 1 }, { unique: true });
+documentSchema.index({ namespace: 1});
+documentSchema.index({ code: 1});
 
 export const Document = mongoose.model('Document', documentSchema);
