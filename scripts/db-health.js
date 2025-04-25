@@ -590,24 +590,39 @@ async function logExtraMongoDocuments(pineconeIndex, fileName, namespace = 'defa
 async function runHealthCheck(pineconeIndex, namespace = 'default') {
     try {
         logger.info('Running health check...');
-
-        // Using existing MongoDB connection
-
         // Get health information from both systems
         const [mongoHealth, pineconeHealth] = await Promise.all([
             getMongoHealth(namespace),
             getPineconeHealth(pineconeIndex)
         ]);
 
-        console.log('\n=== Health Check Results ===\n');
+        // 📊 Health Check Results 📊
+        console.log('\n📊  Health Check Results  📊\n');
 
-        // Print MongoDB document counts
-        console.log('MongoDB Document Counts:');
+        // 🗄️  MongoDB Document Counts
+        console.log('🗄️  MongoDB Document Counts:');
         mongoHealth.forEach((count, fileName) => {
-            console.log(`  ${fileName}: ${count} documents`);
+            console.log(`   • ${fileName}: ${count.toLocaleString()} documents`);
         });
 
-        console.log('Pinecone Health:', pineconeHealth);
+        // 🤖  Pinecone Vector Counts by File
+        console.log('\n🤖  Pinecone Vector Counts by File:');
+        // Aggregate counts and namespaces per file
+        const fileNsMap = new Map();
+        Object.entries(pineconeHealth).forEach(([ns, data]) => {
+            Object.entries(data.vectorsByFile || {}).forEach(([file, cnt]) => {
+                if (!fileNsMap.has(file)) fileNsMap.set(file, {});
+                fileNsMap.get(file)[ns] = cnt;
+            });
+        });
+        // Print per file summary
+        fileNsMap.forEach((nsCounts, file) => {
+            const total = Object.values(nsCounts).reduce((a, b) => a + b, 0);
+            const details = Object.entries(nsCounts)
+                .map(([ns, cnt]) => `${ns}: ${cnt}`)
+                .join(', ');
+            console.log(`   • ${file}: ${total.toLocaleString()} vectors  [${details}]`);
+        });
 
         if (!pineconeHealth || typeof pineconeHealth !== 'object') {
             logger.error('Pinecone health data is not valid:', pineconeHealth);
@@ -615,25 +630,11 @@ async function runHealthCheck(pineconeIndex, namespace = 'default') {
         }
 
 
-        console.log('\nPinecone Vector Counts:');
-        console.log(`Total Vectors:          ${pineconeHealth.totalVectors || 0}`);
-        console.log(`Vectors with fileName:  ${pineconeHealth.vectorsWithFileName || 0}`);
-        console.log(`Orphaned Vectors:       ${pineconeHealth.orphanedVectors || 0}`);
-
-        console.log('\nVectors by File:');
-        for (const [namespace, healthData] of Object.entries(pineconeHealth)) {
-            if (healthData.vectorsByFile) {
-                Object.entries(healthData.vectorsByFile).forEach(([fileName, count]) => {
-                    const safeFileName = fileName || 'Unknown File';
-                    console.log(`  ${safeFileName}: ${count} vectors in namespace ${namespace}`);
-                });
-            } else {
-                console.log(`No vectors found for namespace: ${namespace}`);
-            }
-        }
+        // Raw per-namespace summary omitted; see above per-file summary
 
         // Check for discrepancies
-        console.log('\n=== Discrepancies ===\n');
+        // ⚠️  Discrepancies ⚠️
+        console.log('\n⚠️  Discrepancies  ⚠️');
         let hasDiscrepancies = false;
         const discrepancyFiles = [];
 
@@ -651,37 +652,31 @@ async function runHealthCheck(pineconeIndex, namespace = 'default') {
             const pineconeCount = pineconeCountMap.get(fileName) || 0;
             if (mongoCount !== pineconeCount) {
                 hasDiscrepancies = true;
-                console.log(`\n  ${fileName}:`);
-                console.log(`    MongoDB:       ${mongoCount} documents`);
-                console.log(`    Pinecone:      ${pineconeCount} vectors`);
-                console.log(`    Difference:     ${mongoCount - pineconeCount} missing in Pinecone`);
-                if (mongoCount > pineconeCount) {
-                    discrepancyFiles.push(fileName);
-                }
+                const diff = mongoCount - pineconeCount;
+                console.log(`   • ${fileName}: MongoDB=${mongoCount.toLocaleString()}, Pinecone=${pineconeCount.toLocaleString()} -> Δ=${diff.toLocaleString()}`);
+                if (diff > 0) discrepancyFiles.push(fileName);
             }
         });
 
         if (!hasDiscrepancies) {
-            console.log('No discrepancies found. All counts match!');
+            console.log('   ✅ No discrepancies found. All counts match!');
         }
 
-        console.log('\n=== Overall Health Status ===\n');
+        // 🏁  Overall Health Status 🏁
+        console.log('\n🏁  Overall Health Status  🏁');
 
         const totalMongo = Array.from(mongoCountMap.values()).reduce((a, b) => a + b, 0);
         const totalPinecone = Array.from(pineconeCountMap.values()).reduce((a, b) => a + b, 0);
 
         if (totalMongo === totalPinecone && !hasDiscrepancies) {
-            console.log('✅ System is healthy! All document counts match.');
+            console.log('   ✅ System is healthy! All document counts match.');
         } else {
-            console.log('❌ System needs attention:');
+            console.log('   ❌ System needs attention!');
             if (totalMongo !== totalPinecone) {
-                console.log(`   - Total document count mismatch: MongoDB (${totalMongo}) vs Pinecone (${totalPinecone})`);
+                console.log(`     • Total mismatch: MongoDB=${totalMongo.toLocaleString()} vs Pinecone=${totalPinecone.toLocaleString()}`);
             }
             if (hasDiscrepancies) {
-                console.log('   - File-level discrepancies found (see above)');
-            }
-            if (pineconeHealth.orphanedVectors > 0) {
-                console.log(`   - ${pineconeHealth.orphanedVectors} orphaned vectors found in Pinecone`);
+                console.log('     • File-level discrepancies detected above.');
             }
         }
 
