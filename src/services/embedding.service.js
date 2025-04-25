@@ -273,12 +273,23 @@ async function getVectorCountsByFileName(fileNames, namespace) {
   }
   if (useChroma) {
     const counts = new Map();
+    // Use Chroma collection query to count embeddings per fileName
+    const collection = await getChromaCollection(namespace);
+    const dim = parseInt(process.env.VECTOR_DIM || '1536', 10);
+    const zeroVector = new Array(dim).fill(0);
     for (const fileName of fileNames) {
       try {
-        const count = await Document.countDocuments({ fileName, namespace });
-        counts.set(fileName, count);
+        // Determine how many results to fetch (based on document count)
+        const docCount = await Document.countDocuments({ fileName, namespace });
+        const results = await collection.query({
+          queryEmbeddings: [zeroVector],
+          nResults: docCount,
+          where: { fileName }
+        });
+        const matchCount = results.ids?.[0]?.length || 0;
+        counts.set(fileName, matchCount);
       } catch (error) {
-        logger.error('Error counting documents for file (Chroma):', { fileName, namespace, error: error.message });
+        logger.error('Error getting vector count for file (Chroma):', { fileName, namespace, error: error.message });
         counts.set(fileName, 0);
       }
     }
