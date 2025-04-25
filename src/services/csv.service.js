@@ -358,16 +358,26 @@ export class CSVService {
         }
       ]);
 
-      // Get vector counts from Pinecone
-      const fileNames = files.map(file => file.fileName);
-      const vectorCounts = await getVectorCountsByFileName(fileNames);
+      // Compute vector counts per namespace
+      const namespaces = [...new Set(files.map(f => f.namespace))];
+      const vectorCountsByNs = {};
+      for (const ns of namespaces) {
+        const fileNamesForNs = files
+          .filter(f => f.namespace === ns)
+          .map(f => f.fileName);
+        vectorCountsByNs[ns] = await getVectorCountsByFileName(fileNamesForNs, ns);
+      }
 
       // Add vector counts and sync status to the response
-      const filesWithVectorCounts = files.map(file => ({
-        ...file,
-        vectorCount: vectorCounts.get(file.fileName) || 0,
-        isInSync: (vectorCounts.get(file.fileName) || 0) === file.rowCount
-      }));
+      const filesWithVectorCounts = files.map(file => {
+        const countsMap = vectorCountsByNs[file.namespace] || new Map();
+        const vectorCount = countsMap.get(file.fileName) || 0;
+        return {
+          ...file,
+          vectorCount,
+          isInSync: vectorCount === file.rowCount
+        };
+      });
 
       return {
         totalFiles: files.length,

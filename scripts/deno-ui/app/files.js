@@ -60,10 +60,11 @@ async function listFiles() {
         if (data && data.totalFiles !== undefined && Array.isArray(data.files)) {
             fileList.innerHTML = data.files.length > 0 
                 ? data.files.map(file => `
-                    <div class="border-b border-gray-300 py-2">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <strong>${file.fileName}</strong>
+                <div class="border-b border-gray-300 py-2">
+        <div class="flex justify-between items-start">
+            <div>
+                <strong>${file.fileName}</strong>
+                <span class="ml-2 text-xs bg-blue-100 text-blue-800 px-1 py-0.5 rounded">${file.namespace}</span>
                                 <div class="flex items-center gap-2">
                                     <span>MongoDB: ${file.rowCount} rows</span>
                                     <span>|</span>

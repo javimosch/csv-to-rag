@@ -230,7 +230,13 @@ async function deleteVectors(codes) {
   }
 }
 
-async function getVectorCountsByFileName(fileNames) {
+/**
+ * Get vector counts for given CSV file names optionally scoped to a Pinecone namespace.
+ * @param {string[]} fileNames - Array of CSV file names (metadata.fileName).
+ * @param {string} [namespace] - Pinecone namespace to query. If omitted, queries default.
+ * @returns {Promise<Map<string, number>>} Map of fileName to vector count.
+ */
+async function getVectorCountsByFileName(fileNames, namespace) {
   try {
     if (!fileNames || fileNames.length === 0) {
       return new Map();
@@ -240,26 +246,28 @@ async function getVectorCountsByFileName(fileNames) {
     const counts = new Map();
     const dim = parseInt(process.env.VECTOR_DIM || '1536', 10);
 
-    // Query Pinecone for each file name
     for (const fileName of fileNames) {
       try {
         const zeroVector = new Array(dim).fill(0);
-        const queryResponse = await pineconeIndex.query({
+        // Query within namespace if provided
+        const queryOptions = {
           vector: zeroVector,
           filter: { fileName },
-          topK: 10000, // Set a high limit to get all vectors
+          topK: 10000,
           includeMetadata: false
-        });
+        };
+        let queryResponse;
+        if (namespace) {
+          queryResponse = await pineconeIndex.namespace(namespace).query(queryOptions);
+        } else {
+          queryResponse = await pineconeIndex.query(queryOptions);
+        }
 
         counts.set(fileName, queryResponse.matches?.length || 0);
-        
-        // Add delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Throttle between queries
+        await new Promise(res => setTimeout(res, 100));
       } catch (error) {
-        logger.error('Error getting vector count for file:', {
-          fileName,
-          error: error.message
-        });
+        logger.error('Error getting vector count for file:', { fileName, namespace, error: error.message });
         counts.set(fileName, 0);
       }
     }
